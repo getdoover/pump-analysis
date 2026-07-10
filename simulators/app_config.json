@@ -1,5 +1,73 @@
 {
-    "digital_outputs_enabled": true,
-    "a_funny_message": "yeeha",
-    "simulator_app_key": "sim_app_key"
+    "pump_name": "Sim Pump 1",
+    "suction_source_type": "tag",
+    "suction_tag": {
+        "reference_name": "suction_input",
+        "app_name": "sim_app_key",
+        "tag_name": "suction_bar",
+        "scale": 1.0,
+        "offset": 0.0
+    },
+    "discharge_source_type": "tag",
+    "discharge_tag": {
+        "reference_name": "discharge_input",
+        "app_name": "sim_app_key",
+        "tag_name": "discharge_bar",
+        "scale": 1.0,
+        "offset": 0.0
+    },
+    "speed_source_type": "tag",
+    "speed_tag": {
+        "reference_name": "speed_input",
+        "app_name": "sim_app_key",
+        "tag_name": "engine_rpm",
+        "scale": 1.0,
+        "offset": 0.0
+    },
+    "flow_source_type": "none",
+    "water_temperature_tag": {
+        "reference_name": "water_temp_input",
+        "app_name": "sim_app_key",
+        "tag_name": "water_temp_c",
+        "scale": 1.0,
+        "offset": 0.0
+    },
+    "pump_speed_ratio": 1.0,
+    "pump_curve": [
+        {
+            "flow_m3h": 0,
+            "head_m": 60,
+            "npshr_m": 2.0
+        },
+        {
+            "flow_m3h": 50,
+            "head_m": 55,
+            "npshr_m": 2.5
+        },
+        {
+            "flow_m3h": 100,
+            "head_m": 45,
+            "npshr_m": 3.5
+        },
+        {
+            "flow_m3h": 150,
+            "head_m": 30,
+            "npshr_m": 5.5
+        },
+        {
+            "flow_m3h": 200,
+            "head_m": 10,
+            "npshr_m": 9.0
+        }
+    ],
+    "curve_reference_speed_rpm": 1800,
+    "npsh_warning_margin_m": 1.5,
+    "npsh_danger_margin_m": 0.5,
+    "start_inhibit_seconds": 10,
+    "alert_debounce_seconds": 15,
+    "trip_debounce_seconds": 10,
+    "trip_action": "none",
+    "bep_flow_m3h": 100,
+    "flow_display_units": "ml_per_day",
+    "show_widget_gauges": true
 }

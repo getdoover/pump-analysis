@@ -1,9 +1,4 @@
-"""Smoke tests for the template application.
-
-These validate that modules are importable, the config schema is well-formed,
-the Tags/UI classes subclass the correct bases, and the config export entry
-point runs end-to-end.
-"""
+"""Smoke tests: modules import, schemas are well-formed, exports run end-to-end."""
 
 import json
 
@@ -12,60 +7,95 @@ from pydoover.tags import Tags
 from pydoover.ui import UI
 
 
-def test_import_app():
-    from app_template.application import SampleApplication
-    assert SampleApplication.config_cls is not None
-    assert SampleApplication.tags_cls is not None
-    assert SampleApplication.ui_cls is not None
+def test_import_device_app():
+    from pump_analysis_device.application import PumpAnalysisDeviceApplication
+
+    assert PumpAnalysisDeviceApplication.config_cls is not None
+    assert PumpAnalysisDeviceApplication.tags_cls is not None
+    assert PumpAnalysisDeviceApplication.ui_cls is not None
+
+
+def test_import_processor_app():
+    from pump_analysis_processor.application import PumpAnalysisProcessorApp
+
+    assert PumpAnalysisProcessorApp.config_cls is not None
+    assert PumpAnalysisProcessorApp.tags_cls is not None
 
 
 def test_config_schema():
-    from app_template.app_config import SampleConfig
-    assert issubclass(SampleConfig, Schema)
+    from pump_analysis_common.app_config import PumpAnalysisConfig
 
-    schema = SampleConfig.to_schema()
-    assert isinstance(schema, dict)
+    assert issubclass(PumpAnalysisConfig, Schema)
+    schema = PumpAnalysisConfig.to_schema()
     assert schema["type"] == "object"
-    assert len(schema["properties"]) > 0
-    assert "a_funny_message" in schema["required"]
-    assert "simulator_app_key" in schema["required"]
+
+    # The widget reads deployment_config by sanitised-display-name keys —
+    # these must never drift from the Python attribute names.
+    for key in (
+        "suction_source_type",
+        "suction_tag",
+        "discharge_tag",
+        "speed_tag",
+        "pump_curve",
+        "curve_reference_speed_rpm",
+        "npsh_warning_margin_m",
+        "npsh_danger_margin_m",
+        "trip_action",
+        "dv_widget_url",
+    ):
+        assert key in schema["properties"], f"missing config key {key}"
 
 
 def test_tags():
-    from app_template.app_tags import SampleTags
-    assert issubclass(SampleTags, Tags)
+    from pump_analysis_common.app_tags import PumpAnalysisTags
+
+    assert issubclass(PumpAnalysisTags, Tags)
 
 
 def test_ui():
-    from app_template.app_ui import SampleUI
-    assert issubclass(SampleUI, UI)
+    from pump_analysis_common.app_ui import PumpAnalysisUI
+
+    assert issubclass(PumpAnalysisUI, UI)
 
 
-def test_state_machine():
-    from app_template.app_state import SampleState
-    state = SampleState()
-    assert state.state == "off"
-
-
-def test_config_export(tmp_path):
-    from app_template.app_config import SampleConfig
+def test_device_config_export(tmp_path):
+    from pump_analysis_common.app_config import PumpAnalysisConfig
 
     fp = tmp_path / "doover_config.json"
-    SampleConfig.export(fp, "sample_application")
-
+    PumpAnalysisConfig.export(fp, "pump_analysis")
     data = json.loads(fp.read_text())
-    assert "sample_application" in data
-    assert "config_schema" in data["sample_application"]
-    assert "properties" in data["sample_application"]["config_schema"]
+    assert "config_schema" in data["pump_analysis"]
 
 
 def test_ui_export(tmp_path):
-    from app_template.app_ui import SampleUI
+    from pump_analysis_common.app_ui import PumpAnalysisUI
 
     fp = tmp_path / "doover_config.json"
-    SampleUI(None, None, None).export(fp, "sample_application")
-
+    PumpAnalysisUI(None, None, None).export(fp, "pump_analysis")
     data = json.loads(fp.read_text())
-    assert "ui_schema" in data["sample_application"]
-    assert data["sample_application"]["ui_schema"]["type"] == "uiApplication"
-    assert "is_working" in data["sample_application"]["ui_schema"]["children"]
+    schema = data["pump_analysis"]["ui_schema"]
+    assert schema["type"] == "uiApplication"
+    assert "PumpAnalysisWidget" in schema["children"]
+    assert schema["children"]["PumpAnalysisWidget"]["type"] == "uiRemoteComponent"
+
+
+def test_build_curve_from_loaded_config():
+    """Array-of-Object config points must round-trip into a PumpCurve."""
+    from pump_analysis_common.app_config import PumpAnalysisConfig
+
+    cfg = PumpAnalysisConfig()
+    cfg._inject_deployment_config(
+        {
+            "curve_reference_speed_rpm": 1800,
+            "pump_curve": [
+                {"flow_m3h": 0, "head_m": 60, "npshr_m": 2.0},
+                {"flow_m3h": 100, "head_m": 45},
+                {"flow_m3h": 200, "head_m": 10, "npshr_m": 9.0},
+            ],
+        }
+    )
+    curve = cfg.build_curve()
+    assert curve is not None
+    assert curve.reference_rpm == 1800
+    assert len(curve.points) == 3
+    assert curve.points[1].npshr_m is None

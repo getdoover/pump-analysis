@@ -1,0 +1,41 @@
+{
+  "name": "pump-analysis-widget",
+  "version": "0.1.0",
+  "description": "Pump-curve remote component for the Doover pump-analysis app \u2014 manufacturer curve affinity-scaled to live speed, operating point, NPSH risk zone and recent-history trail.",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "build": "rsbuild build",
+    "watch": "rsbuild build --watch --mode development",
+    "serve": "serve -s assets/ -l 8006",
+    "typecheck": "tsc --noEmit",
+    "dev": "rsbuild dev --config rsbuild.dev.config.ts"
+  },
+  "author": "Span Engineering",
+  "license": "ISC",
+  "dependencies": {
+    "@module-federation/enhanced": "^0.21.6",
+    "@module-federation/rsbuild-plugin": "^0.21.6",
+    "@rsbuild/core": "^1.6.14",
+    "@rsbuild/plugin-react": "^1.4.2",
+    "@rspack/cli": "^1.6.7",
+    "@tanstack/react-query": "~5.90.2",
+    "clsx": "^2.1.1",
+    "dayjs": "^1.11.0",
+    "doover-js": "file:../../doover-js/doover-js-0.6.5.tgz",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router": "^7.7.0",
+    "recharts": "^2.15.0",
+    "serve": "^14.2.5",
+    "tailwind-merge": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "autoprefixer": "^10.4.20",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.0"
+  }
+}

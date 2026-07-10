@@ -1,61 +1,81 @@
-# Doover App Template
+# Pump Analysis — working notes for Claude
 
-A template for building device applications on the Doover IoT platform using pydoover 1.0.
+Pump operating-point / cavitation-margin analysis on the Doover platform, using pydoover 1.0.
+Leachate-telemetry-style layout: a shared workspace package + thin app packages.
 
 ## Commands
 
 ```bash
-uv run pytest tests -v          # Run tests
-uv run export-config             # Write config_schema into doover_config.json
-uv run export-ui                 # Write ui_schema into doover_config.json (required to publish)
-doover app run                   # Run app + simulator locally via docker-compose
+uv run pytest tests -v            # run tests (maths golden tests + protection + schema smoke)
+uv run export-config              # device app config_schema -> doover_config.json
+uv run export-ui                  # device app ui_schema -> doover_config.json
+uv run export-config-processor    # processor app variants
+uv run export-ui-processor
+doover app run                    # app + pump simulator via docker-compose
+cd widget && npm run build        # MF remote bundle -> widget/assets/PumpAnalysisWidget.js
 ```
 
-## Project Structure
+## Structure
 
 ```
-src/app_template/
-  __init__.py        # Entry point — run_app(SampleApplication())
-  application.py     # Main app class (setup, main_loop, UI handlers)
-  app_config.py      # Config schema — class-level declarations
-  app_tags.py        # Runtime state tags — bound to UI elements
-  app_ui.py          # UI definition — subclasses ui.UI
-  app_state.py       # State machine using pydoover.state.StateMachine
-simulators/sample/   # Simulator app that produces test data
-tests/               # pytest suite
+packages/pump_analysis_common/src/pump_analysis_common/
+  pump_math.py    # PURE hydraulics: vapour pressure, density, TDH, NPSHa, affinity, 4-20mA scaling
+  curve.py        # PumpCurve: interpolation, inversion (head->flow) with dH/dQ confidence
+  engine.py       # analyse(Readings, curve, SiteParams) -> Results — deployment-agnostic
+  protection.py   # ProtectionMonitor: debounce, start inhibit, trip latch (clock-injected)
+  sources.py      # gather_readings(config, fetch_ai=?, get_remote=?) — capability-based
+  publish.py      # Results -> tags (shared by both apps)
+  app_config.py   # shared schema incl. ScaledTagRef sources, CurvePoint array, TripAction
+  app_tags.py     # RemoteTags (raw inputs) + computed tags + *_warning_hidden
+  app_ui.py       # native UI + ui.RemoteComponent(PumpAnalysisWidget)
+src/pump_analysis_device/       # docker app (type DEV) — AI pins + tags, DO trip
+src/pump_analysis_processor/    # cloud processor (type PRO) — tags only, SET_TAG trip
+widget/                         # React + rsbuild Module Federation + tailwind (shadcn-style)
+simulators/pump/                # synthetic pump: normal -> cavitating sweep every 10 min
 ```
 
-## pydoover 1.0 Patterns
+## Invariants — do not break
 
-This app uses the pydoover 1.0 declarative API. Key patterns:
+- **`pump_math.py` / `curve.py` / `engine.py` / `protection.py` import no pydoover.** They are
+  golden-tested against hand-worked numbers; keep them pure.
+- **Config display names ARE the runtime keys.** `deployment_config` keys derive from
+  sanitised display names, not Python attribute names. The widget reads those keys
+  (`widget/src/lib/pump.ts`) and `tests/test_imports.py::test_config_schema` pins them.
+  Rename display name + widget key + test together, or not at all.
+- **TagRef config elements must stay top-level** on the schema — RemoteTag resolution only
+  scans top-level TagRefs. Don't nest them in config.Object groups.
+- **Trip defaults to `NONE`** (alert-only). The trip latches (`ProtectionMonitor.tripped`)
+  until reset from the UI. Never wire `Application.request_shutdown()` for the pump trip —
+  that shuts down the *doovit*.
+- **Inferred flow always ships with `flow_confidence`**; ambiguous curve inversions are capped
+  at 0.5. Don't present inferred flow as a measurement.
+- Widget MF contract: rsbuild `name: "PumpAnalysisWidget"`, expose `./PumpAnalysisWidget` —
+  must match `scope`/`module` in `app_ui.py`'s RemoteComponent. Build tooling is
+  **rsbuild/rspack**, not webpack.
 
-### Application class (application.py)
-- Set `config_cls`, `tags_cls`, `ui_cls` as class attributes — framework wires them up automatically
-- Override `async def setup()` for init and `async def main_loop()` for the periodic loop
-- Use `@ui.handler("element_name")` for UI interaction callbacks (signature: `self, ctx, value`)
-- Access config via `self.config.<field>.value`, tags via `self.tags.<name>.set(val)` / `.get()`
-- Cross-app tags: `self.get_tag("tag_name", app_key)`
-- Messaging: `await self.create_message(channel, {data})`
+## Local simulation (works on macOS)
 
-### Config (app_config.py)
-- Subclass `config.Schema` with class-level `config.Boolean`, `config.String`, `config.Application`, etc.
-- `export()` is a classmethod: `SampleConfig.export(path, name)`
+```bash
+cd simulators && docker compose up -d --build
+# watch the analysis flow:
+curl -sk https://localhost:49100/ch/v1/agent/1/tag_values/aggregate | python3 -m json.tool
+docker compose logs -f pump_analysis
+```
 
-### Tags (app_tags.py)
-- Subclass `Tags` with class-level `Tag("type", default=...)` declarations
-- Types: "boolean", "number", "integer", "string", "array", "object"
+- Device agent image is **spaneng/doover-device-agent:main** (hyphenated; the old
+  `doover_device_agent:apps` image is a year stale and speaks an older gRPC API).
+- The compose file uses **bridge networking + DDA_URI=device_agent:50051**, not
+  `network_mode: host` — host mode breaks on macOS Docker Desktop.
+- The agent needs **AGENT_ID=1** set — channel events carry agent_id and pydoover's
+  models require an int.
+- The agent serves a **local HTTPS data API on :49100**: `/ch/v1/agent/{id}`,
+  `/ch/v1/agent/{id}/{channel}/aggregate` — this is how you view tags locally
+  (the full Doover UI still needs a cloud-connected device).
+- The pump simulator sweeps normal → cavitating every 10 min, so state walks
+  ok → marginal → danger (and back) without hardware.
 
-### UI (app_ui.py)
-- Subclass `ui.UI` with class-level element declarations
-- Bind variables to tags: `ui.NumericVariable("Label", value=MyTags.field, name="id")`
-- Element types: `BooleanVariable`, `NumericVariable`, `TextVariable`, `Button`, `TextInput`, `FloatInput`, `Select`, `Submodule`
-- Use explicit `name=` kwarg on interactive elements to match handler names
+## House rules
 
-### State Machine (app_state.py)
-- Uses `pydoover.state.StateMachine` (wraps the `transitions` library)
-- Define `states` and `transitions` as class attributes, `on_enter_<state>()` callbacks
-
-## Doover Skills
-
-If you have the doover-skills plugin installed, use `/doover` to see all available skills.
-Key skills: `/doover-device-apps` for device app development, `/pydoover` for API reference.
+- **Never run `git commit`/`push` on Tom's behalf** — he commits himself.
+- After changing `app_config.py` or `app_ui.py`, re-run the export commands so
+  `doover_config.json` stays in sync (CI-published apps render from it).

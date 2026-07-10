@@ -1,24 +1,34 @@
 services:
   device_agent:
-    image: spaneng/doover_device_agent:apps
-    network_mode: host
+    image: spaneng/doover-device-agent:main
+    # Bridge networking (not network_mode: host) so the stack also runs on
+    # macOS Docker Desktop; apps reach the agent via DDA_URI service DNS.
+    ports:
+      - "50051:50051"
+      - "49100:49100"  # local web viewer
+    environment:
+      # Offline local agent still needs a numeric identity — channel events
+      # carry agent_id and pydoover's models require it.
+      - AGENT_ID=1
 
-  sample_simulator:
-    build: ./sample
-    network_mode: host
+  pump_simulator:
+    build: ./pump
     restart: unless-stopped
     depends_on:
       - device_agent
     environment:
       - APP_KEY=sim_app_key
+      - DDA_URI=device_agent:50051
+      - HEALTHCHECK_PORT=49201
 
-  sample_application:
+  pump_analysis:
     build: ../
-    network_mode: host
     restart: unless-stopped
     depends_on:
       - device_agent
-      - sample_simulator
+      - pump_simulator
     environment:
       - APP_KEY=test_app_key
       - CONFIG_FP=/app/simulators/app_config.json
+      - DDA_URI=device_agent:50051
+      - HEALTHCHECK_PORT=49200

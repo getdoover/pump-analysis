@@ -17,6 +17,7 @@ RUN uv venv --system-site-packages
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=packages/pump_analysis_common/pyproject.toml,target=packages/pump_analysis_common/pyproject.toml \
     SKIP=$(uv pip freeze --system | sed -E 's/[[:space:]@=].*//; s/^/--no-install-package /' | tr '\n' ' ') && \
     uv sync --locked --no-install-project --no-dev $SKIP
 

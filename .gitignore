@@ -172,3 +172,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Widget (Module Federation remote component)
+widget/node_modules/
+widget/dist/
+widget/@mf-types/

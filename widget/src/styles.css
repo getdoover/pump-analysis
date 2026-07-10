@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* shadcn-style design tokens, prefixed and scoped to the widget root so the
+   host page's theme is untouched. Values mirror shadcn/ui neutral. */
+.paw-root {
+  --paw-background: 0 0% 100%;
+  --paw-foreground: 240 10% 3.9%;
+  --paw-card: 0 0% 100%;
+  --paw-card-foreground: 240 10% 3.9%;
+  --paw-muted: 240 4.8% 95.9%;
+  --paw-muted-foreground: 240 3.8% 46.1%;
+  --paw-border: 240 5.9% 90%;
+  --paw-primary: 240 5.9% 10%;
+  --paw-primary-foreground: 0 0% 98%;
+  --paw-destructive: 0 84.2% 60.2%;
+  --paw-warning: 38 92% 50%;
+  --paw-success: 142 71% 45%;
+
+  color: hsl(var(--paw-foreground));
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .paw-root {
+    --paw-background: 240 10% 3.9%;
+    --paw-foreground: 0 0% 98%;
+    --paw-card: 240 10% 3.9%;
+    --paw-card-foreground: 0 0% 98%;
+    --paw-muted: 240 3.7% 15.9%;
+    --paw-muted-foreground: 240 5% 64.9%;
+    --paw-border: 240 3.7% 15.9%;
+    --paw-primary: 0 0% 98%;
+    --paw-primary-foreground: 240 5.9% 10%;
+  }
+}
