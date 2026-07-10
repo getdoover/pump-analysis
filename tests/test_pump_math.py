@@ -226,3 +226,42 @@ class TestEngine:
         assert r.npsha_m is not None
         assert r.flow_source is FlowSource.NONE
         assert r.npsh_margin_m is None
+
+
+class TestPressureUnits:
+    def test_metres_head_per_bar_at_20c(self):
+        # 100 kPa / (998.2 * 9.80665) ≈ 10.21 m
+        assert pm.metres_head_per_bar(20.0) == pytest.approx(10.21, abs=0.01)
+
+    def test_vacuum_converts_negative(self):
+        m = pm.bar_to_metres_head(-0.85, pm.water_density_kg_m3(20.0))
+        assert m == pytest.approx(-8.68, abs=0.02)
+
+    def test_hot_water_needs_more_metres_per_bar(self):
+        # lower density -> a bar is a taller column
+        assert pm.metres_head_per_bar(60.0) > pm.metres_head_per_bar(5.0)
+
+
+def test_pressure_display_factor_follows_temperature():
+    from pump_analysis_common.app_config import PumpAnalysisConfig, PressureUnits
+
+    def build(**overrides):
+        cfg = PumpAnalysisConfig()
+        cfg._inject_deployment_config({"pump_curve": [], **overrides})
+        return cfg
+
+    cfg = build(pressure_display_units="metres_head", default_water_temperature_c=20.0)
+    label, factor = cfg.pressure_display()
+    assert label == "m head"
+    assert factor == pytest.approx(10.21, abs=0.01)
+
+    # Hot water: same bar is a taller column of fluid.
+    hot = build(pressure_display_units="metres_head", default_water_temperature_c=70.0)
+    assert hot.pressure_display()[1] > factor
+
+    label2, factor2 = build(pressure_display_units="psi").pressure_display()
+    assert label2 == "psi"
+    assert factor2 == pytest.approx(14.5038, abs=0.001)
+
+    assert build(pressure_display_units="bar").pressure_display() == ("bar", 1.0)
+    assert PressureUnits.METRES_HEAD.value == "metres_head"

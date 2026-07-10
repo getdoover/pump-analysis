@@ -79,6 +79,8 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
     [depCfg, appKey]
   );
   const fx = cfg.flowFactor; // m³/h -> display units, applied to every flow axis/value
+  const pf = cfg.pressureFactor; // bar -> display units, for the pressure gauges
+  const pressurePrecision = Math.abs(pf) >= 5 ? 1 : 2;
 
   const live = useMemo(() => {
     const t = (tag: string) => (appKey ? tagValue(tagAgg, appKey, tag) : null);
@@ -310,12 +312,12 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
               {live.suction != null && (
                 <RadialGauge
                   size="sm"
-                  value={live.suction}
-                  min={cfg.suctionRange[0]}
-                  max={cfg.suctionRange[1]}
-                  unit="bar"
+                  value={live.suction * pf}
+                  min={cfg.suctionRange[0] * pf}
+                  max={cfg.suctionRange[1] * pf}
+                  unit={cfg.pressureUnit}
                   label="Inlet pressure"
-                  precision={2}
+                  precision={pressurePrecision}
                   fill={
                     live.suction <= -0.5
                       ? COLOURS.pointDanger
@@ -335,12 +337,12 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
               {live.discharge != null && (
                 <RadialGauge
                   size="sm"
-                  value={live.discharge}
-                  min={cfg.dischargeRange[0]}
-                  max={cfg.dischargeRange[1]}
-                  unit="bar"
+                  value={live.discharge * pf}
+                  min={cfg.dischargeRange[0] * pf}
+                  max={cfg.dischargeRange[1] * pf}
+                  unit={cfg.pressureUnit}
                   label="Discharge pressure"
-                  precision={2}
+                  precision={pressurePrecision}
                   fill={COLOURS.liveCurve}
                   track={COLOURS.liveCurveTrack}
                 />
@@ -358,18 +360,25 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
                 <>
                   {/* Datasheet-style stacked panels sharing one flow axis:
                       head-flow on top, NPSH in its own panel below. */}
-                  <ResponsiveContainer width="100%" height={230}>
-                    <ComposedChart margin={{ top: 8, right: 12, bottom: 0, left: 0 }} syncId="pump-curve">
+                  <ResponsiveContainer width="100%" height={252}>
+                    <ComposedChart margin={{ top: 8, right: 12, bottom: 18, left: 0 }} syncId="pump-curve">
                       <CartesianGrid strokeDasharray="3 3" opacity={0.4} />
                       <XAxis
                         type="number"
                         dataKey="flow"
                         domain={[0, xMax]}
-                        tick={false}
-                        height={4}
+                        tick={{ fontSize: 11 }}
+                        height={34}
+                        label={{
+                          value: `Flow (${cfg.flowUnit})`,
+                          position: "insideBottom",
+                          offset: -6,
+                          fontSize: 11,
+                        }}
                       />
                       <YAxis
                         type="number"
+                        width={56}
                         domain={[0, (dataMax: number) => Math.ceil(dataMax / 5) * 5]}
                         tick={{ fontSize: 11 }}
                         label={{ value: "Head (m)", angle: -90, position: "insideLeft", fontSize: 11 }}
@@ -468,23 +477,25 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
                   </ResponsiveContainer>
 
                   {/* NPSH panel — same flow axis, its own metres scale */}
-                  <ResponsiveContainer width="100%" height={150}>
-                    <ComposedChart margin={{ top: 2, right: 12, bottom: 4, left: 0 }} syncId="pump-curve">
+                  <ResponsiveContainer width="100%" height={176}>
+                    <ComposedChart margin={{ top: 2, right: 12, bottom: 18, left: 0 }} syncId="pump-curve">
                       <CartesianGrid strokeDasharray="3 3" opacity={0.4} />
                       <XAxis
                         type="number"
                         dataKey="flow"
                         domain={[0, xMax]}
                         tick={{ fontSize: 11 }}
+                        height={34}
                         label={{
                           value: `Flow (${cfg.flowUnit})`,
                           position: "insideBottom",
-                          offset: -2,
+                          offset: -6,
                           fontSize: 11,
                         }}
                       />
                       <YAxis
                         type="number"
+                        width={56}
                         domain={[0, (dataMax: number) => Math.ceil(dataMax)]}
                         tick={{ fontSize: 11 }}
                         allowDecimals={false}

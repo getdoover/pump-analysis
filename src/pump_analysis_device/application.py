@@ -91,8 +91,14 @@ class PumpAnalysisDeviceApplication(Application):
             await self._execute_trip(pump, results.npsh_margin_m)
 
         _, flow_factor = self.config.flow_display()
+        _, pressure_factor = self.config.pressure_display()
         await publish_results(
-            self.tags, results, self.monitor, config_faults, flow_display_factor=flow_factor
+            self.tags,
+            results,
+            self.monitor,
+            config_faults,
+            flow_display_factor=flow_factor,
+            pressure_display_factor=pressure_factor,
         )
 
     async def _execute_trip(self, pump: str, margin: float | None):

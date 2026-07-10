@@ -799,6 +799,25 @@
                     "default": "ml_per_day",
                     "x-position": 26
                 },
+                "pressure_display_units": {
+                    "enum": [
+                        "metres_head",
+                        "bar",
+                        "kpa",
+                        "psi"
+                    ],
+                    "title": "Pressure Display Units",
+                    "x-name": "pressure_display_units",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Units inlet/discharge pressure are displayed in. Metres of head is density-corrected at the default water temperature. Internal maths stays in bar/kPa.",
+                    "default": "metres_head",
+                    "x-position": 27
+                },
                 "bep_flow_m3h": {
                     "title": "BEP Flow (m3/h)",
                     "x-name": "bep_flow_m3h",
@@ -810,7 +829,7 @@
                     "x-required": false,
                     "description": "Best-efficiency-point flow at the curve reference speed, from the manufacturer. Enables the efficient-zone shading and % of BEP output.",
                     "default": null,
-                    "x-position": 27
+                    "x-position": 28
                 },
                 "pump_curve": {
                     "title": "Pump Curve",
@@ -819,7 +838,7 @@
                     "type": "array",
                     "x-required": true,
                     "description": "Manufacturer head-flow(-NPSHr) points at the reference speed. Digitise from the datasheet.",
-                    "x-position": 28,
+                    "x-position": 29,
                     "items": {
                         "title": "Point",
                         "x-name": "point",
@@ -877,7 +896,7 @@
                     "x-required": false,
                     "description": "Pump speed the curve points were published at.",
                     "default": null,
-                    "x-position": 29
+                    "x-position": 30
                 },
                 "site_elevation_m": {
                     "title": "Site Elevation (m)",
@@ -890,7 +909,7 @@
                     "x-required": false,
                     "description": "Metres above sea level; sets barometric pressure for NPSHa.",
                     "default": 0.0,
-                    "x-position": 30
+                    "x-position": 31
                 },
                 "gauge_separation_m": {
                     "title": "Gauge Separation (m)",
@@ -903,7 +922,7 @@
                     "x-required": false,
                     "description": "Discharge gauge height minus suction gauge height.",
                     "default": 0.0,
-                    "x-position": 31
+                    "x-position": 32
                 },
                 "suction_gauge_height_above_impeller_m": {
                     "title": "Suction Gauge Height Above Impeller (m)",
@@ -916,7 +935,7 @@
                     "x-required": false,
                     "description": "Height of the suction tapping above the impeller eye (negative if below).",
                     "default": 0.0,
-                    "x-position": 32
+                    "x-position": 33
                 },
                 "suction_pipe_id_mm": {
                     "title": "Suction Pipe ID (mm)",
@@ -929,7 +948,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 33
+                    "x-position": 34
                 },
                 "discharge_pipe_id_mm": {
                     "title": "Discharge Pipe ID (mm)",
@@ -942,7 +961,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 34
+                    "x-position": 35
                 },
                 "minimum_running_speed_rpm": {
                     "title": "Minimum Running Speed (RPM)",
@@ -955,7 +974,7 @@
                     "x-required": false,
                     "description": "Below this pump speed the pump is treated as not running.",
                     "default": 300.0,
-                    "x-position": 35
+                    "x-position": 36
                 },
                 "start_inhibit_seconds": {
                     "title": "Start Inhibit (Seconds)",
@@ -968,7 +987,7 @@
                     "x-required": false,
                     "description": "Alerts and trips are suppressed for this long after the pump starts (priming).",
                     "default": 60.0,
-                    "x-position": 36
+                    "x-position": 37
                 },
                 "npsh_warning_margin_m": {
                     "title": "NPSH Warning Margin (m)",
@@ -981,7 +1000,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this raises the marginal alert.",
                     "default": 1.5,
-                    "x-position": 37
+                    "x-position": 38
                 },
                 "npsh_danger_margin_m": {
                     "title": "NPSH Danger Margin (m)",
@@ -994,7 +1013,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this is the danger/trip condition.",
                     "default": 0.5,
-                    "x-position": 38
+                    "x-position": 39
                 },
                 "alert_debounce_seconds": {
                     "title": "Alert Debounce (Seconds)",
@@ -1007,7 +1026,7 @@
                     "x-required": false,
                     "description": "A condition must persist this long before an alert is sent.",
                     "default": 30.0,
-                    "x-position": 39
+                    "x-position": 40
                 },
                 "trip_debounce_seconds": {
                     "title": "Trip Debounce (Seconds)",
@@ -1020,7 +1039,7 @@
                     "x-required": false,
                     "description": "DANGER must persist this long before the trip action fires.",
                     "default": 10.0,
-                    "x-position": 40
+                    "x-position": 41
                 },
                 "trip_action": {
                     "enum": [
@@ -1038,7 +1057,7 @@
                     "x-required": false,
                     "description": "NONE = alert only (commissioning default). Arm per pump only after thresholds are proven on site.",
                     "default": "none",
-                    "x-position": 41
+                    "x-position": 42
                 },
                 "trip_tag": {
                     "title": "Trip Tag",
@@ -1052,7 +1071,7 @@
                     "x-required": false,
                     "description": "For SET_TAG: the tag to write (e.g. an engine controller stop command).",
                     "default": null,
-                    "x-position": 42,
+                    "x-position": 43,
                     "properties": {
                         "reference_name": {
                             "title": "Reference Name",
@@ -1121,7 +1140,7 @@
                     "x-required": false,
                     "description": "Value written to the trip tag. Parsed as JSON where possible (true, 0, \"stop\").",
                     "default": "true",
-                    "x-position": 43
+                    "x-position": 44
                 },
                 "trip_do_pin": {
                     "title": "Trip DO Pin",
@@ -1134,7 +1153,7 @@
                     "x-required": false,
                     "description": "For DIGITAL_OUTPUT: the doovit DO wired to the panel stop input.",
                     "default": null,
-                    "x-position": 44
+                    "x-position": 45
                 },
                 "trip_do_value": {
                     "title": "Trip DO Value",
@@ -1147,7 +1166,7 @@
                     "x-required": false,
                     "description": "Level driven onto the trip DO when tripping.",
                     "default": true,
-                    "x-position": 45
+                    "x-position": 46
                 },
                 "dv_widget_url": {
                     "title": "DV Widget URL",
@@ -1160,7 +1179,7 @@
                     "x-required": false,
                     "description": "URL of the pump-curve widget bundle (Module Federation remote entry).",
                     "default": null,
-                    "x-position": 46
+                    "x-position": 47
                 }
             },
             "additionalElements": true,
@@ -1272,32 +1291,32 @@
                 "inlet_pressure": {
                     "name": "inlet_pressure",
                     "type": "uiVariable",
-                    "displayString": "Inlet Pressure (bar)",
+                    "displayString": "Inlet Pressure (m head)",
                     "showActivity": true,
                     "form": "linearGauge",
                     "position": 5,
                     "hidden": false,
                     "varType": "float",
-                    "currentValue": "$tag.app().suction_bar:number:null",
-                    "decPrecision": 2,
+                    "currentValue": "$tag.app().suction_display:number:null",
+                    "decPrecision": 1,
                     "ranges": [
                         {
-                            "min": -1,
-                            "max": -0.5,
+                            "min": -10.2,
+                            "max": -5.1,
                             "colour": "red",
                             "show_on_graph": true,
                             "label": "Deep vacuum"
                         },
                         {
-                            "min": -0.5,
-                            "max": -0.15,
+                            "min": -5.1,
+                            "max": -1.53,
                             "colour": "yellow",
                             "show_on_graph": true,
                             "label": "Vacuum"
                         },
                         {
-                            "min": -0.15,
-                            "max": 10,
+                            "min": -1.53,
+                            "max": 102,
                             "colour": "green",
                             "show_on_graph": true,
                             "label": "Healthy"
@@ -1307,32 +1326,32 @@
                 "discharge_pressure": {
                     "name": "discharge_pressure",
                     "type": "uiVariable",
-                    "displayString": "Discharge Pressure (bar)",
+                    "displayString": "Discharge Pressure (m head)",
                     "showActivity": true,
                     "form": "linearGauge",
                     "position": 6,
                     "hidden": false,
                     "varType": "float",
-                    "currentValue": "$tag.app().discharge_bar:number:null",
-                    "decPrecision": 2,
+                    "currentValue": "$tag.app().discharge_display:number:null",
+                    "decPrecision": 1,
                     "ranges": [
                         {
-                            "min": -1,
-                            "max": 1.75,
+                            "min": -10.2,
+                            "max": 17.85,
                             "colour": "yellow",
                             "show_on_graph": true,
                             "label": "Low"
                         },
                         {
-                            "min": 1.75,
-                            "max": 8.35,
+                            "min": 17.85,
+                            "max": 85.17,
                             "colour": "green",
                             "show_on_graph": true,
                             "label": "Normal"
                         },
                         {
-                            "min": 8.35,
-                            "max": 10,
+                            "min": 85.17,
+                            "max": 102,
                             "colour": "yellow",
                             "show_on_graph": true,
                             "label": "High"
@@ -2420,6 +2439,25 @@
                     "default": "ml_per_day",
                     "x-position": 26
                 },
+                "pressure_display_units": {
+                    "enum": [
+                        "metres_head",
+                        "bar",
+                        "kpa",
+                        "psi"
+                    ],
+                    "title": "Pressure Display Units",
+                    "x-name": "pressure_display_units",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Units inlet/discharge pressure are displayed in. Metres of head is density-corrected at the default water temperature. Internal maths stays in bar/kPa.",
+                    "default": "metres_head",
+                    "x-position": 27
+                },
                 "bep_flow_m3h": {
                     "title": "BEP Flow (m3/h)",
                     "x-name": "bep_flow_m3h",
@@ -2431,7 +2469,7 @@
                     "x-required": false,
                     "description": "Best-efficiency-point flow at the curve reference speed, from the manufacturer. Enables the efficient-zone shading and % of BEP output.",
                     "default": null,
-                    "x-position": 27
+                    "x-position": 28
                 },
                 "pump_curve": {
                     "title": "Pump Curve",
@@ -2440,7 +2478,7 @@
                     "type": "array",
                     "x-required": true,
                     "description": "Manufacturer head-flow(-NPSHr) points at the reference speed. Digitise from the datasheet.",
-                    "x-position": 28,
+                    "x-position": 29,
                     "items": {
                         "title": "Point",
                         "x-name": "point",
@@ -2498,7 +2536,7 @@
                     "x-required": false,
                     "description": "Pump speed the curve points were published at.",
                     "default": null,
-                    "x-position": 29
+                    "x-position": 30
                 },
                 "site_elevation_m": {
                     "title": "Site Elevation (m)",
@@ -2511,7 +2549,7 @@
                     "x-required": false,
                     "description": "Metres above sea level; sets barometric pressure for NPSHa.",
                     "default": 0.0,
-                    "x-position": 30
+                    "x-position": 31
                 },
                 "gauge_separation_m": {
                     "title": "Gauge Separation (m)",
@@ -2524,7 +2562,7 @@
                     "x-required": false,
                     "description": "Discharge gauge height minus suction gauge height.",
                     "default": 0.0,
-                    "x-position": 31
+                    "x-position": 32
                 },
                 "suction_gauge_height_above_impeller_m": {
                     "title": "Suction Gauge Height Above Impeller (m)",
@@ -2537,7 +2575,7 @@
                     "x-required": false,
                     "description": "Height of the suction tapping above the impeller eye (negative if below).",
                     "default": 0.0,
-                    "x-position": 32
+                    "x-position": 33
                 },
                 "suction_pipe_id_mm": {
                     "title": "Suction Pipe ID (mm)",
@@ -2550,7 +2588,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 33
+                    "x-position": 34
                 },
                 "discharge_pipe_id_mm": {
                     "title": "Discharge Pipe ID (mm)",
@@ -2563,7 +2601,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 34
+                    "x-position": 35
                 },
                 "minimum_running_speed_rpm": {
                     "title": "Minimum Running Speed (RPM)",
@@ -2576,7 +2614,7 @@
                     "x-required": false,
                     "description": "Below this pump speed the pump is treated as not running.",
                     "default": 300.0,
-                    "x-position": 35
+                    "x-position": 36
                 },
                 "start_inhibit_seconds": {
                     "title": "Start Inhibit (Seconds)",
@@ -2589,7 +2627,7 @@
                     "x-required": false,
                     "description": "Alerts and trips are suppressed for this long after the pump starts (priming).",
                     "default": 60.0,
-                    "x-position": 36
+                    "x-position": 37
                 },
                 "npsh_warning_margin_m": {
                     "title": "NPSH Warning Margin (m)",
@@ -2602,7 +2640,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this raises the marginal alert.",
                     "default": 1.5,
-                    "x-position": 37
+                    "x-position": 38
                 },
                 "npsh_danger_margin_m": {
                     "title": "NPSH Danger Margin (m)",
@@ -2615,7 +2653,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this is the danger/trip condition.",
                     "default": 0.5,
-                    "x-position": 38
+                    "x-position": 39
                 },
                 "alert_debounce_seconds": {
                     "title": "Alert Debounce (Seconds)",
@@ -2628,7 +2666,7 @@
                     "x-required": false,
                     "description": "A condition must persist this long before an alert is sent.",
                     "default": 30.0,
-                    "x-position": 39
+                    "x-position": 40
                 },
                 "trip_debounce_seconds": {
                     "title": "Trip Debounce (Seconds)",
@@ -2641,7 +2679,7 @@
                     "x-required": false,
                     "description": "DANGER must persist this long before the trip action fires.",
                     "default": 10.0,
-                    "x-position": 40
+                    "x-position": 41
                 },
                 "trip_action": {
                     "enum": [
@@ -2659,7 +2697,7 @@
                     "x-required": false,
                     "description": "NONE = alert only (commissioning default). Arm per pump only after thresholds are proven on site.",
                     "default": "none",
-                    "x-position": 41
+                    "x-position": 42
                 },
                 "trip_tag": {
                     "title": "Trip Tag",
@@ -2673,7 +2711,7 @@
                     "x-required": false,
                     "description": "For SET_TAG: the tag to write (e.g. an engine controller stop command).",
                     "default": null,
-                    "x-position": 42,
+                    "x-position": 43,
                     "properties": {
                         "reference_name": {
                             "title": "Reference Name",
@@ -2742,7 +2780,7 @@
                     "x-required": false,
                     "description": "Value written to the trip tag. Parsed as JSON where possible (true, 0, \"stop\").",
                     "default": "true",
-                    "x-position": 43
+                    "x-position": 44
                 },
                 "trip_do_pin": {
                     "title": "Trip DO Pin",
@@ -2755,7 +2793,7 @@
                     "x-required": false,
                     "description": "For DIGITAL_OUTPUT: the doovit DO wired to the panel stop input.",
                     "default": null,
-                    "x-position": 44
+                    "x-position": 45
                 },
                 "trip_do_value": {
                     "title": "Trip DO Value",
@@ -2768,7 +2806,7 @@
                     "x-required": false,
                     "description": "Level driven onto the trip DO when tripping.",
                     "default": true,
-                    "x-position": 45
+                    "x-position": 46
                 },
                 "dv_widget_url": {
                     "title": "DV Widget URL",
@@ -2781,7 +2819,7 @@
                     "x-required": false,
                     "description": "URL of the pump-curve widget bundle (Module Federation remote entry).",
                     "default": null,
-                    "x-position": 46
+                    "x-position": 47
                 },
                 "dv_proc_subscriptions": {
                     "title": "Subscription",
@@ -2796,7 +2834,7 @@
                     "default": [
                         "tag_values"
                     ],
-                    "x-position": 47,
+                    "x-position": 48,
                     "items": {
                         "title": "Channel Subscription",
                         "x-name": "dv_proc_subscription",
@@ -2916,32 +2954,32 @@
                 "inlet_pressure": {
                     "name": "inlet_pressure",
                     "type": "uiVariable",
-                    "displayString": "Inlet Pressure (bar)",
+                    "displayString": "Inlet Pressure (m head)",
                     "showActivity": true,
                     "form": "linearGauge",
                     "position": 5,
                     "hidden": false,
                     "varType": "float",
-                    "currentValue": "$tag.app().suction_bar:number:null",
-                    "decPrecision": 2,
+                    "currentValue": "$tag.app().suction_display:number:null",
+                    "decPrecision": 1,
                     "ranges": [
                         {
-                            "min": -1,
-                            "max": -0.5,
+                            "min": -10.2,
+                            "max": -5.1,
                             "colour": "red",
                             "show_on_graph": true,
                             "label": "Deep vacuum"
                         },
                         {
-                            "min": -0.5,
-                            "max": -0.15,
+                            "min": -5.1,
+                            "max": -1.53,
                             "colour": "yellow",
                             "show_on_graph": true,
                             "label": "Vacuum"
                         },
                         {
-                            "min": -0.15,
-                            "max": 10,
+                            "min": -1.53,
+                            "max": 102,
                             "colour": "green",
                             "show_on_graph": true,
                             "label": "Healthy"
@@ -2951,32 +2989,32 @@
                 "discharge_pressure": {
                     "name": "discharge_pressure",
                     "type": "uiVariable",
-                    "displayString": "Discharge Pressure (bar)",
+                    "displayString": "Discharge Pressure (m head)",
                     "showActivity": true,
                     "form": "linearGauge",
                     "position": 6,
                     "hidden": false,
                     "varType": "float",
-                    "currentValue": "$tag.app().discharge_bar:number:null",
-                    "decPrecision": 2,
+                    "currentValue": "$tag.app().discharge_display:number:null",
+                    "decPrecision": 1,
                     "ranges": [
                         {
-                            "min": -1,
-                            "max": 1.75,
+                            "min": -10.2,
+                            "max": 17.85,
                             "colour": "yellow",
                             "show_on_graph": true,
                             "label": "Low"
                         },
                         {
-                            "min": 1.75,
-                            "max": 8.35,
+                            "min": 17.85,
+                            "max": 85.17,
                             "colour": "green",
                             "show_on_graph": true,
                             "label": "Normal"
                         },
                         {
-                            "min": 8.35,
-                            "max": 10,
+                            "min": 85.17,
+                            "max": 102,
                             "colour": "yellow",
                             "show_on_graph": true,
                             "label": "High"

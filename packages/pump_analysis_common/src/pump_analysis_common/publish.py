@@ -14,12 +14,21 @@ async def publish_results(
     config_faults: list[str],
     *,
     flow_display_factor: float = 1.0,
+    pressure_display_factor: float = 1.0,
 ) -> None:
-    await tags.suction_bar.set(
+    suction_bar = (
         None if results.suction_kpa_g is None else results.suction_kpa_g / 100.0
     )
-    await tags.discharge_bar.set(
+    discharge_bar = (
         None if results.discharge_kpa_g is None else results.discharge_kpa_g / 100.0
+    )
+    await tags.suction_bar.set(suction_bar)
+    await tags.discharge_bar.set(discharge_bar)
+    await tags.suction_display.set(
+        None if suction_bar is None else suction_bar * pressure_display_factor
+    )
+    await tags.discharge_display.set(
+        None if discharge_bar is None else discharge_bar * pressure_display_factor
     )
     await tags.pump_rpm.set(results.pump_rpm)
     await tags.tdh_m.set(results.tdh_m)

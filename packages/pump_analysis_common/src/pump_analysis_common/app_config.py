@@ -15,6 +15,7 @@ import enum
 
 from pydoover import config
 
+from . import pump_math
 from .curve import CurvePoint, PumpCurve
 from .engine import SiteParams
 
@@ -36,6 +37,24 @@ FLOW_UNIT_INFO: dict[FlowUnits, tuple[str, float]] = {
     FlowUnits.ML_PER_DAY: ("ML/day", 24.0 / 1000.0),
     FlowUnits.M3_PER_HOUR: ("m3/h", 1.0),
     FlowUnits.L_PER_S: ("L/s", 1.0 / 3.6),
+}
+
+
+class PressureUnits(enum.Enum):
+    METRES_HEAD = "metres_head"
+    BAR = "bar"
+    KPA = "kpa"
+    PSI = "psi"
+
+
+#: display label and bar -> unit factor. METRES_HEAD is density-dependent and
+#: resolved at runtime (see PumpAnalysisConfig.pressure_display), so its factor
+#: here is the 20 °C reference value.
+PRESSURE_UNIT_INFO: dict[PressureUnits, tuple[str, float]] = {
+    PressureUnits.METRES_HEAD: ("m head", 10.1997),
+    PressureUnits.BAR: ("bar", 1.0),
+    PressureUnits.KPA: ("kPa", 100.0),
+    PressureUnits.PSI: ("psi", 14.50377),
 }
 
 
@@ -200,6 +219,12 @@ class PumpAnalysisConfig(config.Schema):
         default=FlowUnits.ML_PER_DAY,
         description="Units flow is displayed in (UI and widget). Internal maths and the curve stay in m3/h.",
     )
+    pressure_display_units = config.Enum(
+        "Pressure Display Units",
+        choices=PressureUnits,
+        default=PressureUnits.METRES_HEAD,
+        description="Units inlet/discharge pressure are displayed in. Metres of head is density-corrected at the default water temperature. Internal maths stays in bar/kPa.",
+    )
 
     # ------------------------------------------------------------- pump curve
     bep_flow_m3h = config.Number(
@@ -317,6 +342,20 @@ class PumpAnalysisConfig(config.Schema):
     def flow_display(self) -> tuple[str, float]:
         """(unit label, m³/h -> display conversion factor)."""
         return FLOW_UNIT_INFO[self.flow_display_units.value]
+
+    def pressure_display(self) -> tuple[str, float]:
+        """(unit label, bar -> display conversion factor).
+
+        Metres of head depends on fluid density, so it is resolved against the
+        configured default water temperature rather than the 20 °C reference.
+        """
+        units = self.pressure_display_units.value
+        label, factor = PRESSURE_UNIT_INFO[units]
+        if units is PressureUnits.METRES_HEAD:
+            factor = pump_math.metres_head_per_bar(
+                self.default_water_temperature_c.value or 20.0
+            )
+        return label, factor
 
     def to_site_params(self) -> SiteParams:
         return SiteParams(

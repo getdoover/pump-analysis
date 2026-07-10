@@ -132,6 +132,16 @@ def bar_to_kpa(bar: float) -> float:
     return bar * 100.0
 
 
+def bar_to_metres_head(bar: float, density_kg_m3: float) -> float:
+    """Convert a gauge pressure to an equivalent column of the pumped fluid."""
+    return bar * 100_000.0 / (density_kg_m3 * G)
+
+
+def metres_head_per_bar(temp_c: float) -> float:
+    """m of water head per bar at a given temperature (~10.20 m/bar at 20 °C)."""
+    return bar_to_metres_head(1.0, water_density_kg_m3(temp_c))
+
+
 def scale_4_20ma(
     reading_ma: float | None,
     range_low: float,

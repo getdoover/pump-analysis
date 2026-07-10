@@ -58,25 +58,36 @@ class PumpAnalysisUI(ui.UI):
             ui.Range("Healthy", warn, warn * 2, ui.Colour.green),
         ]
 
-        # Pressure gauges span the transmitter ranges. Inlet severity runs on
-        # vacuum depth (the cavitation precursor); discharge low-end means the
-        # pump isn't making head.
+        # Pressure gauges span the transmitter ranges, converted to the
+        # configured display units. Inlet severity runs on vacuum depth (the
+        # cavitation precursor); discharge low-end means the pump isn't making
+        # head. Thresholds are defined in bar and scaled with everything else.
+        p_label, pf = cfg.pressure_display()
+        self._elements["inlet_pressure"].display_name = f"Inlet Pressure ({p_label})"
+        self._elements["discharge_pressure"].display_name = (
+            f"Discharge Pressure ({p_label})"
+        )
+        # m head reads whole-number-ish; bar needs two decimals.
+        precision = 1 if abs(pf) >= 5 else 2
+        self._elements["inlet_pressure"].precision = precision
+        self._elements["discharge_pressure"].precision = precision
+
         s_lo = cfg.suction_range_low_bar.value
         s_hi = cfg.suction_range_high_bar.value
         if s_lo is not None and s_hi is not None and s_hi > s_lo:
             self._elements["inlet_pressure"].ranges = [
-                ui.Range("Deep vacuum", round(s_lo, 2), -0.5, ui.Colour.red),
-                ui.Range("Vacuum", -0.5, -0.15, ui.Colour.yellow),
-                ui.Range("Healthy", -0.15, round(s_hi, 2), ui.Colour.green),
+                ui.Range("Deep vacuum", round(s_lo * pf, 2), round(-0.5 * pf, 2), ui.Colour.red),
+                ui.Range("Vacuum", round(-0.5 * pf, 2), round(-0.15 * pf, 2), ui.Colour.yellow),
+                ui.Range("Healthy", round(-0.15 * pf, 2), round(s_hi * pf, 2), ui.Colour.green),
             ]
         d_lo = cfg.discharge_range_low_bar.value
         d_hi = cfg.discharge_range_high_bar.value
         if d_lo is not None and d_hi is not None and d_hi > d_lo:
             span = d_hi - d_lo
             self._elements["discharge_pressure"].ranges = [
-                ui.Range("Low", round(d_lo, 2), round(d_lo + 0.25 * span, 2), ui.Colour.yellow),
-                ui.Range("Normal", round(d_lo + 0.25 * span, 2), round(d_lo + 0.85 * span, 2), ui.Colour.green),
-                ui.Range("High", round(d_lo + 0.85 * span, 2), round(d_hi, 2), ui.Colour.yellow),
+                ui.Range("Low", round(d_lo * pf, 2), round((d_lo + 0.25 * span) * pf, 2), ui.Colour.yellow),
+                ui.Range("Normal", round((d_lo + 0.25 * span) * pf, 2), round((d_lo + 0.85 * span) * pf, 2), ui.Colour.green),
+                ui.Range("High", round((d_lo + 0.85 * span) * pf, 2), round(d_hi * pf, 2), ui.Colour.yellow),
             ]
 
     # ---- native gauges (production home of the headline values; the widget's
@@ -118,29 +129,29 @@ class PumpAnalysisUI(ui.UI):
     )
 
     inlet_pressure = ui.NumericVariable(
-        "Inlet Pressure (bar)",
-        value=T.suction_bar,
+        "Inlet Pressure (m head)",
+        value=T.suction_display,
         name="inlet_pressure",
-        precision=2,
+        precision=1,
         position=5,
         form=ui.Widget.linear,
         ranges=[
-            ui.Range("Deep vacuum", -1, -0.5, ui.Colour.red),
-            ui.Range("Vacuum", -0.5, -0.15, ui.Colour.yellow),
-            ui.Range("Healthy", -0.15, 10, ui.Colour.green),
+            ui.Range("Deep vacuum", -10.2, -5.1, ui.Colour.red),
+            ui.Range("Vacuum", -5.1, -1.53, ui.Colour.yellow),
+            ui.Range("Healthy", -1.53, 102, ui.Colour.green),
         ],
     )
     discharge_pressure = ui.NumericVariable(
-        "Discharge Pressure (bar)",
-        value=T.discharge_bar,
+        "Discharge Pressure (m head)",
+        value=T.discharge_display,
         name="discharge_pressure",
-        precision=2,
+        precision=1,
         position=6,
         form=ui.Widget.linear,
         ranges=[
-            ui.Range("Low", -1, 1.75, ui.Colour.yellow),
-            ui.Range("Normal", 1.75, 8.35, ui.Colour.green),
-            ui.Range("High", 8.35, 10, ui.Colour.yellow),
+            ui.Range("Low", -10.2, 17.85, ui.Colour.yellow),
+            ui.Range("Normal", 17.85, 85.17, ui.Colour.green),
+            ui.Range("High", 85.17, 102, ui.Colour.yellow),
         ],
     )
 
