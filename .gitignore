@@ -177,3 +177,8 @@ cython_debug/
 widget/node_modules/
 widget/dist/
 widget/@mf-types/
+
+# The Python `lib/` rule above otherwise swallows the widget's own source
+# directory (widget/src/lib/) — un-ignore it explicitly.
+!widget/src/lib/
+!widget/src/lib/**
