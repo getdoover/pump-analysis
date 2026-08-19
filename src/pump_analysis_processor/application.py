@@ -26,6 +26,9 @@ from pump_analysis_common.app_ui import PumpAnalysisUI
 
 log = logging.getLogger(__name__)
 
+#: Notification topic — subscribers filter on this to route pump alerts.
+NOTIFY_TOPIC = "pump_analysis"
+
 REMOTE_TAGS = {
     "suction_input": "raw_suction",
     "discharge_input": "raw_discharge",
@@ -127,13 +130,17 @@ class PumpAnalysisProcessorApp(Application):
             await self.send_notification(
                 f"{pump}: NPSH margin marginal ({results.npsh_margin_m:.2f} m) — "
                 f"cavitation risk developing",
+                title=f"{pump}: cavitation margin marginal",
                 severity=NotificationSeverity.Warn,
+                topic=NOTIFY_TOPIC,
             )
         if actions.send_danger_alert:
             await self.send_notification(
                 f"{pump}: NPSH margin critical ({results.npsh_margin_m:.2f} m) — "
                 f"cavitation conditions",
+                title=f"{pump}: cavitation margin critical",
                 severity=NotificationSeverity.Critical,
+                topic=NOTIFY_TOPIC,
             )
         if actions.fire_trip:
             await self._execute_trip(pump, results.npsh_margin_m)
@@ -169,13 +176,17 @@ class PumpAnalysisProcessorApp(Application):
             await self.send_notification(
                 f"{pump}: TRIPPED — pump shutdown commanded (NPSH margin {margin_txt}). "
                 f"Reset required from the Doover UI.",
+                title=f"{pump}: TRIPPED",
                 severity=NotificationSeverity.Critical,
+                topic=NOTIFY_TOPIC,
             )
         else:
             await self.send_notification(
                 f"{pump}: trip condition met (margin {margin_txt}) — "
                 f"no trip armed, manual intervention required",
+                title=f"{pump}: trip condition met",
                 severity=NotificationSeverity.Critical,
+                topic=NOTIFY_TOPIC,
             )
 
     @ui.handler("reset_trip")
@@ -188,10 +199,3 @@ class PumpAnalysisProcessorApp(Application):
         state.update({"danger_since": None, "danger_alerted": False})
         await self.set_tag("_mon_state", state)
         await ctx.set_value(None)
-
-
-def handler(event, context):
-    """AWS-Lambda-style entrypoint."""
-    from pydoover.processor import run_app
-
-    return run_app(PumpAnalysisProcessorApp(), event, context)

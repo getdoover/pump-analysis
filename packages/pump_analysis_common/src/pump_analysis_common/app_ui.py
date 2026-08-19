@@ -27,9 +27,8 @@ class PumpAnalysisUI(ui.UI):
         # there is no flow meter, plain measured flow when there is one.
         flow_el = self._elements["calculated_flow"]
         inferred = cfg.flow_source_type.value is SourceType.NONE
-        flow_el.display_name = (
-            f"Calculated Flow ({label})" if inferred else f"Flow ({label})"
-        )
+        flow_el.display_name = "Calculated Flow" if inferred else "Flow"
+        flow_el.units = label
         # Confidence only means something for calculated flow.
         self._elements["flow_confidence_gauge"].hidden = not inferred
 
@@ -58,15 +57,23 @@ class PumpAnalysisUI(ui.UI):
             ui.Range("Healthy", warn, warn * 2, ui.Colour.green),
         ]
 
+        # Margin plot threshold lines follow the same configured thresholds.
+        margin_series = next(
+            (s for s in self._elements["npsh_plot"].series if s.name == "margin_m"), None
+        )
+        if margin_series is not None:
+            margin_series.thresholds = [
+                ui.Threshold("Warning", warn, ui.Colour.yellow),
+                ui.Threshold("Danger", danger, ui.Colour.red),
+            ]
+
         # Pressure gauges span the transmitter ranges, converted to the
         # configured display units. Inlet severity runs on vacuum depth (the
         # cavitation precursor); discharge low-end means the pump isn't making
         # head. Thresholds are defined in bar and scaled with everything else.
         p_label, pf = cfg.pressure_display()
-        self._elements["inlet_pressure"].display_name = f"Inlet Pressure ({p_label})"
-        self._elements["discharge_pressure"].display_name = (
-            f"Discharge Pressure ({p_label})"
-        )
+        self._elements["inlet_pressure"].units = p_label
+        self._elements["discharge_pressure"].units = p_label
         # m head reads whole-number-ish; bar needs two decimals.
         precision = 1 if abs(pf) >= 5 else 2
         self._elements["inlet_pressure"].precision = precision
@@ -93,9 +100,10 @@ class PumpAnalysisUI(ui.UI):
     # ---- native gauges (production home of the headline values; the widget's
     #      own gauges are a testing aid behind Show Widget Gauges)
     calculated_flow = ui.NumericVariable(
-        "Calculated Flow (ML/day)",
+        "Calculated Flow",
         value=T.flow_display,
         name="calculated_flow",
+        units="ML/day",
         precision=2,
         position=2,
         form=ui.Widget.radial,
@@ -115,9 +123,10 @@ class PumpAnalysisUI(ui.UI):
         ],
     )
     npsh_margin = ui.NumericVariable(
-        "NPSH Margin (m)",
+        "NPSH Margin",
         value=T.npsh_margin_m,
         name="npsh_margin",
+        units="m",
         precision=2,
         position=4,
         form=ui.Widget.radial,
@@ -129,9 +138,10 @@ class PumpAnalysisUI(ui.UI):
     )
 
     inlet_pressure = ui.NumericVariable(
-        "Inlet Pressure (m head)",
+        "Inlet Pressure",
         value=T.suction_display,
         name="inlet_pressure",
+        units="m head",
         precision=1,
         position=5,
         form=ui.Widget.linear,
@@ -142,9 +152,10 @@ class PumpAnalysisUI(ui.UI):
         ],
     )
     discharge_pressure = ui.NumericVariable(
-        "Discharge Pressure (m head)",
+        "Discharge Pressure",
         value=T.discharge_display,
         name="discharge_pressure",
+        units="m head",
         precision=1,
         position=6,
         form=ui.Widget.linear,
@@ -182,16 +193,22 @@ class PumpAnalysisUI(ui.UI):
 
     # ---- headline values
     tdh = ui.NumericVariable(
-        "Total Head (m)", value=T.tdh_m, name="tdh", precision=1, position=12
+        "Total Head", value=T.tdh_m, name="tdh", units="m", precision=1, position=12
     )
     pump_rpm = ui.NumericVariable(
-        "Pump Speed (RPM)", value=T.pump_rpm, name="pump_rpm", precision=0, position=13
+        "Pump Speed",
+        value=T.pump_rpm,
+        name="pump_rpm",
+        units="RPM",
+        precision=0,
+        position=13,
     )
     state = ui.TextVariable("Status", value=T.state, name="state", position=14)
     pct_of_bep = ui.NumericVariable(
-        "% of BEP Flow",
+        "BEP Flow",
         value=T.pct_of_bep,
         name="pct_of_bep",
+        units="%",
         precision=0,
         position=15,
         ranges=[
@@ -205,18 +222,61 @@ class PumpAnalysisUI(ui.UI):
     npsh_plot = ui.Multiplot(
         "Cavitation Margin",
         series=[
-            ui.Series("NPSH Available (m)", value=T.npsha_m, colour="blue"),
-            ui.Series("NPSH Required (m)", value=T.npshr_m, colour="red"),
-            ui.Series("Margin (m)", value=T.npsh_margin_m, colour="green"),
+            ui.Series(
+                "NPSH Available",
+                value=T.npsha_m,
+                name="npsh_available_m",
+                colour="blue",
+                units="m",
+            ),
+            ui.Series(
+                "NPSH Required",
+                value=T.npshr_m,
+                name="npsh_required_m",
+                colour="red",
+                units="m",
+            ),
+            # Thresholds get restated from config in `_apply_config`.
+            ui.Series(
+                "Margin",
+                value=T.npsh_margin_m,
+                name="margin_m",
+                colour="green",
+                units="m",
+                thresholds=[
+                    ui.Threshold("Warning", 1.5, ui.Colour.yellow),
+                    ui.Threshold("Danger", 0.5, ui.Colour.red),
+                ],
+            ),
         ],
+        default_range_view=ui.RangeView.line,
         position=20,
     )
     pressure_plot = ui.Multiplot(
         "Pressures & Flow",
         series=[
-            ui.Series("Suction (bar)", value=T.suction_bar, colour="orange"),
-            ui.Series("Discharge (bar)", value=T.discharge_bar, colour="purple"),
-            ui.Series("Flow (m3/h)", value=T.flow_m3h, colour="teal", shared_axis=False),
+            ui.Series(
+                "Suction",
+                value=T.suction_bar,
+                name="suction_bar",
+                colour="orange",
+                units="bar",
+            ),
+            ui.Series(
+                "Discharge",
+                value=T.discharge_bar,
+                name="discharge_bar",
+                colour="purple",
+                units="bar",
+            ),
+            ui.Series(
+                "Flow",
+                value=T.flow_m3h,
+                name="flow_m3h",
+                colour="teal",
+                shared_axis=False,
+                units="m3/h",
+            ),
         ],
         position=21,
     )
@@ -228,26 +288,45 @@ class PumpAnalysisUI(ui.UI):
         position=30,
         children=[
             ui.NumericVariable(
-                "NPSH Available (m)", value=T.npsha_m, name="npsha", precision=2
+                "NPSH Available", value=T.npsha_m, name="npsha", units="m", precision=2
             ),
             ui.NumericVariable(
-                "NPSH Required (m)", value=T.npshr_m, name="npshr", precision=2
+                "NPSH Required", value=T.npshr_m, name="npshr", units="m", precision=2
             ),
             ui.NumericVariable(
-                "Engine Speed (RPM)", value=T.engine_rpm, name="engine_rpm", precision=0
+                "Engine Speed",
+                value=T.engine_rpm,
+                name="engine_rpm",
+                units="RPM",
+                precision=0,
             ),
             ui.TextVariable("Flow Source", value=T.flow_origin, name="flow_origin"),
             ui.NumericVariable(
                 "Flow Confidence", value=T.flow_confidence, name="flow_confidence", precision=2
             ),
             ui.NumericVariable(
-                "Curve Deviation (%)",
+                "Curve Deviation",
                 value=T.curve_deviation_pct,
                 name="curve_deviation",
+                units="%",
                 precision=1,
             ),
             ui.TextVariable("Faults", value=T.fault_text, name="fault_text"),
             ui.TextVariable("Trip Reason", value=T.trip_reason, name="trip_reason"),
-            ui.Button("Reset Trip", name="reset_trip"),
+            ui.Button(
+                "Reset Trip",
+                name="reset_trip",
+                colour=ui.Colour.red,
+                requires_confirm=ui.ConfirmDialog(
+                    title="Reset pump trip?",
+                    warning_reason=(
+                        "The pump tripped on cavitation margin. Confirm the "
+                        "suction condition has been corrected before resetting."
+                    ),
+                    audit=ui.AuditConfig(required=True),
+                ),
+                # The site marks the command failed if the app doesn't answer.
+                command_timeout=30,
+            ),
         ],
     )

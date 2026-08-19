@@ -29,6 +29,12 @@ def test_config_schema():
     schema = PumpAnalysisConfig.to_schema()
     assert schema["type"] == "object"
 
+    # Conditional fields (show_if) live in `allOf` branches rather than at the
+    # top level, but their runtime deployment_config keys are the same.
+    declared = set(schema["properties"])
+    for branch in schema.get("allOf", []):
+        declared.update(branch["then"]["properties"])
+
     # The widget reads deployment_config by sanitised-display-name keys —
     # these must never drift from the Python attribute names.
     for key in (
@@ -41,9 +47,40 @@ def test_config_schema():
         "npsh_warning_margin_m",
         "npsh_danger_margin_m",
         "trip_action",
-        "dv_widget_url",
     ):
-        assert key in schema["properties"], f"missing config key {key}"
+        assert key in declared, f"missing config key {key}"
+
+
+def test_source_fields_are_conditional():
+    """Source-specific fields only show for the source type that uses them."""
+    from pump_analysis_common.app_config import PumpAnalysisConfig, SourceType
+
+    schema = PumpAnalysisConfig.to_schema()
+    branches = {
+        (
+            branch["if"]["properties"]["suction_source_type"]["const"]
+            if "suction_source_type" in branch["if"]["properties"]
+            else None
+        ): branch
+        for branch in schema["allOf"]
+    }
+    assert (
+        "suction_ai_pin" in branches[SourceType.ANALOGUE_IN.value]["then"]["properties"]
+    )
+    assert "suction_tag" in branches[SourceType.TAG.value]["then"]["properties"]
+
+
+def test_gated_fields_still_load_defaults():
+    """A field hidden by show_if must still read its default at runtime."""
+    from pump_analysis_common.app_config import PumpAnalysisConfig
+
+    cfg = PumpAnalysisConfig()
+    cfg._inject_deployment_config(
+        {"suction_source_type": "analogue_in", "pump_curve": []}
+    )
+    assert cfg.suction_ai_pin.value == 2  # shown
+    assert cfg.suction_tag.configured is False  # hidden, unset
+    assert cfg.trip_do_pin.value is None  # hidden, default
 
 
 def test_tags():

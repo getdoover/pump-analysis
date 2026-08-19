@@ -182,3 +182,7 @@ widget/@mf-types/
 # directory (widget/src/lib/) — un-ignore it explicitly.
 !widget/src/lib/
 !widget/src/lib/**
+
+packages_export/
+requirements.txt
+package.zip

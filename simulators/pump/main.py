@@ -10,19 +10,19 @@ import math
 import random
 import time
 
+from pydoover import tags
 from pydoover.docker import Application, run_app
-from pydoover.tags import Tag, Tags
 
 CYCLE_S = 600.0  # full normal->cavitating->normal sweep
 REFERENCE_RPM = 1800.0
 
 
-class PumpSimulatorTags(Tags):
-    suction_bar = Tag("number", default=0.0)
-    discharge_bar = Tag("number", default=0.0)
-    engine_rpm = Tag("number", default=0.0)
-    flow_m3h = Tag("number", default=0.0)
-    water_temp_c = Tag("number", default=20.0)
+class PumpSimulatorTags(tags.Tags):
+    suction_bar = tags.Number(default=0.0)
+    discharge_bar = tags.Number(default=0.0)
+    engine_rpm = tags.Number(default=0.0)
+    flow_m3h = tags.Number(default=0.0)
+    water_temp_c = tags.Number(default=20.0)
 
 
 class PumpSimulator(Application):
@@ -45,7 +45,9 @@ class PumpSimulator(Application):
         # cavitation develops (head collapse is the classic signature).
         healthy_head_bar = 4.5 * (rpm / REFERENCE_RPM) ** 2
         collapse = 0.35 * max(0.0, sag - 0.7) / 0.3  # only near full sag
-        discharge = suction + healthy_head_bar * (1.0 - collapse) + random.gauss(0, 0.02)
+        discharge = (
+            suction + healthy_head_bar * (1.0 - collapse) + random.gauss(0, 0.02)
+        )
 
         flow = 95.0 * (rpm / REFERENCE_RPM) * (1.0 - 0.3 * collapse)
 

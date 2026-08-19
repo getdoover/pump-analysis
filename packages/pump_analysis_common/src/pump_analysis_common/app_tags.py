@@ -1,52 +1,76 @@
-from pydoover.tags import RemoteTag, Tag, Tags
+"""Tag declarations shared by both deployments.
+
+House style (pydoover 1.5+): typed declarations — ``tags.Number`` /
+``tags.Boolean`` / ``tags.String`` — with keyword-only arguments, rather than
+the generic ``Tag("number", ...)`` form. The typed classes validate their
+``log_on`` auto-log descriptors against the tag type at declaration time.
+
+``live=True`` marks the values an operator watches in real time. Live tags are
+republished as a one-shot snapshot each main loop *only while somebody has that
+tag open in live mode*, so a watching UI sees fresh values without every
+sample being persisted.
+"""
+
+from pydoover import tags
 
 
-class PumpAnalysisTags(Tags):
+class PumpAnalysisTags(tags.Tags):
     # ---- raw upstream values (bound to the *_input TagRef config elements)
-    raw_suction = RemoteTag(
+    raw_suction = tags.RemoteTag(
         "number", reference_name="suction_input", optional=True, republish_locally=False
     )
-    raw_discharge = RemoteTag(
-        "number", reference_name="discharge_input", optional=True, republish_locally=False
+    raw_discharge = tags.RemoteTag(
+        "number",
+        reference_name="discharge_input",
+        optional=True,
+        republish_locally=False,
     )
-    raw_flow = RemoteTag(
+    raw_flow = tags.RemoteTag(
         "number", reference_name="flow_input", optional=True, republish_locally=False
     )
-    raw_speed = RemoteTag(
+    raw_speed = tags.RemoteTag(
         "number", reference_name="speed_input", optional=True, republish_locally=False
     )
-    raw_water_temp = RemoteTag(
-        "number", reference_name="water_temp_input", optional=True, republish_locally=False
+    raw_water_temp = tags.RemoteTag(
+        "number",
+        reference_name="water_temp_input",
+        optional=True,
+        republish_locally=False,
     )
 
     # ---- computed results (UI + widget read these)
-    suction_bar = Tag("number", default=None)
-    discharge_bar = Tag("number", default=None)
+    suction_bar = tags.Number(default=None)
+    discharge_bar = tags.Number(default=None)
     #: pressures converted to the configured display units (UI binds to these)
-    suction_display = Tag("number", default=None)
-    discharge_display = Tag("number", default=None)
-    engine_rpm = Tag("number", default=None)
-    pump_rpm = Tag("number", default=None)
-    tdh_m = Tag("number", default=None)
-    flow_m3h = Tag("number", default=None)
-    flow_origin = Tag("string", default="none")  # none | measured | inferred
-    flow_confidence = Tag("number", default=None)
+    suction_display = tags.Number(default=None, live=True)
+    discharge_display = tags.Number(default=None, live=True)
+    engine_rpm = tags.Number(default=None, live=True)
+    pump_rpm = tags.Number(default=None, live=True)
+    tdh_m = tags.Number(default=None, live=True)
+    flow_m3h = tags.Number(default=None)
+    #: none | measured | inferred — a change means the operating picture changed
+    flow_origin = tags.String(default="none", log_on=tags.AnyChange())
+    flow_confidence = tags.Number(default=None)
     #: flow converted to the configured display units (UI binds to this)
-    flow_display = Tag("number", default=None)
-    npsha_m = Tag("number", default=None)
-    npshr_m = Tag("number", default=None)
-    npsh_margin_m = Tag("number", default=None)
-    curve_deviation_pct = Tag("number", default=None)
-    pct_of_bep = Tag("number", default=None)
+    flow_display = tags.Number(default=None, live=True)
+    npsha_m = tags.Number(default=None, live=True)
+    npshr_m = tags.Number(default=None, live=True)
+    #: the headline safety number — log immediately when it crosses either
+    #: side of zero margin, whatever the periodic log interval is doing.
+    npsh_margin_m = tags.Number(
+        default=None, live=True, log_on=tags.Cross(0.0, deadband=0.2)
+    )
+    curve_deviation_pct = tags.Number(default=None)
+    pct_of_bep = tags.Number(default=None)
 
     # ---- state
-    state = Tag("string", default="not_running")
-    fault_text = Tag("string", default="")
-    tripped = Tag("boolean", default=False)
-    trip_reason = Tag("string", default="")
+    state = tags.String(default="not_running", log_on=tags.AnyChange())
+    fault_text = tags.String(default="")
+    tripped = tags.Boolean(default=False, log_on=tags.AnyChange())
+    trip_reason = tags.String(default="")
 
     # ---- warning-indicator visibility (hidden=True means indicator off)
-    marginal_warning_hidden = Tag("boolean", default=True)
-    danger_warning_hidden = Tag("boolean", default=True)
-    tripped_warning_hidden = Tag("boolean", default=True)
-    fault_warning_hidden = Tag("boolean", default=True)
+    marginal_warning_hidden = tags.Boolean(default=True)
+    danger_warning_hidden = tags.Boolean(default=True)
+    tripped_warning_hidden = tags.Boolean(default=True)
+    fault_warning_hidden = tags.Boolean(default=True)

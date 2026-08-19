@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Shared maths core, config, tags and UI for the pump-analysis apps"
 requires-python = ">=3.11"
 dependencies = [
-    "pydoover>=1.5.0",
+    "pydoover>=1.12.5",
 ]
 
 [build-system]

@@ -757,7 +757,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "pump-analysis-common", editable = "packages/pump_analysis_common" },
-    { name = "pydoover", specifier = ">=1.5.1" },
+    { name = "pydoover", specifier = ">=1.12.5" },
     { name = "transitions", specifier = ">=0.9.2" },
 ]
 
@@ -780,19 +780,19 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydoover", specifier = ">=1.5.0" }]
+requires-dist = [{ name = "pydoover", specifier = ">=1.12.5" }]
 
 [[package]]
 name = "pydoover"
-version = "1.9.0"
+version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8b/62/d1f8990796bf9bb4ca1bc06f6cf6f8f45fe7aa2908d4958c32b38a5f05c5/pydoover-1.9.0.tar.gz", hash = "sha256:3210d2e72971f966635b2ad503d633e08a484998e76a75c5e1d568a1fed4e467", size = 540646, upload-time = "2026-07-04T06:29:51.475Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/23/db3f0fc81429d2a7636939b5234fb9eb8484b31ab936544afb337fc56599/pydoover-1.14.0.tar.gz", hash = "sha256:5ccbf85fa543fcfd3f8242be0b026502b38dea76db0a2981b2f84055a4f84fe9", size = 577054, upload-time = "2026-08-13T01:35:38.502Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/84/30/347040b037ff0cb72704acb3a659faa62beb64ffbdb2fbe6d11c213c2281/pydoover-1.9.0-py3-none-any.whl", hash = "sha256:22dddf41b1ee809ef2455d8381b3b806a1ee8dbb25c12699fd5b8a42eb584e79", size = 287253, upload-time = "2026-07-04T06:29:50.073Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/15/6bcc672e9617265aa4c251d1dc6c84443f25868074447aafb8b86d110f95/pydoover-1.14.0-py3-none-any.whl", hash = "sha256:4b50d4922069c9ba7df83398082f976a18a43e6adaa36bd0fc00a792211fb32f", size = 307706, upload-time = "2026-08-13T01:35:37.009Z" },
 ]
 
 [[package]]

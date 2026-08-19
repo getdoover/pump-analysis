@@ -7,6 +7,12 @@ sanitise to exactly the attribute name — change them together or not at all.
 
 Tag references must sit at the top level of the schema: RemoteTag resolution
 only scans top-level TagRef elements (see leachate-telemetry's ScaledTagRef).
+
+Source-dependent fields are gated with ``show_if=config.equal(...)`` so an
+installer only sees the fields their chosen source actually uses. A gated field
+that is switched off still loads its default at runtime, so ``.value`` reads
+stay safe everywhere — but it moves out of ``properties`` and into an ``allOf``
+branch in the exported JSON schema.
 """
 
 from __future__ import annotations
@@ -109,16 +115,22 @@ class PumpAnalysisConfig(config.Schema):
     suction_source_type = config.Enum(
         "Suction Source Type", choices=SourceType, default=SourceType.ANALOGUE_IN
     )
-    suction_ai_pin = config.Integer("Suction AI Pin", default=2)
+    suction_ai_pin = config.Integer(
+        "Suction AI Pin",
+        default=2,
+        show_if=config.equal(suction_source_type, SourceType.ANALOGUE_IN),
+    )
     suction_range_low_bar = config.Number(
         "Suction Range Low (bar)",
         default=-1.0,
         description="Transmitter reading at 4 mA.",
+        show_if=config.equal(suction_source_type, SourceType.ANALOGUE_IN),
     )
     suction_range_high_bar = config.Number(
         "Suction Range High (bar)",
         default=10.0,
         description="Transmitter reading at 20 mA.",
+        show_if=config.equal(suction_source_type, SourceType.ANALOGUE_IN),
     )
     suction_tag = ScaledTagRef(
         "Suction Tag",
@@ -126,18 +138,27 @@ class PumpAnalysisConfig(config.Schema):
         description="Tag carrying suction pressure. Scale/offset must yield bar gauge.",
         reference_name__default="suction_input",
         reference_name__hidden=True,
+        show_if=config.equal(suction_source_type, SourceType.TAG),
     )
 
     # ----------------------------------------------------- discharge pressure
     discharge_source_type = config.Enum(
         "Discharge Source Type", choices=SourceType, default=SourceType.ANALOGUE_IN
     )
-    discharge_ai_pin = config.Integer("Discharge AI Pin", default=3)
+    discharge_ai_pin = config.Integer(
+        "Discharge AI Pin",
+        default=3,
+        show_if=config.equal(discharge_source_type, SourceType.ANALOGUE_IN),
+    )
     discharge_range_low_bar = config.Number(
-        "Discharge Range Low (bar)", default=-1.0
+        "Discharge Range Low (bar)",
+        default=-1.0,
+        show_if=config.equal(discharge_source_type, SourceType.ANALOGUE_IN),
     )
     discharge_range_high_bar = config.Number(
-        "Discharge Range High (bar)", default=10.0
+        "Discharge Range High (bar)",
+        default=10.0,
+        show_if=config.equal(discharge_source_type, SourceType.ANALOGUE_IN),
     )
     discharge_tag = ScaledTagRef(
         "Discharge Tag",
@@ -145,6 +166,7 @@ class PumpAnalysisConfig(config.Schema):
         description="Tag carrying discharge pressure. Scale/offset must yield bar gauge.",
         reference_name__default="discharge_input",
         reference_name__hidden=True,
+        show_if=config.equal(discharge_source_type, SourceType.TAG),
     )
 
     # ------------------------------------------------------ flow (optional)
@@ -154,15 +176,28 @@ class PumpAnalysisConfig(config.Schema):
         default=SourceType.NONE,
         description="With no flow meter, flow is inferred from the pump curve.",
     )
-    flow_ai_pin = config.Integer("Flow AI Pin", default=4)
-    flow_range_low_m3h = config.Number("Flow Range Low (m3/h)", default=0.0)
-    flow_range_high_m3h = config.Number("Flow Range High (m3/h)", default=200.0)
+    flow_ai_pin = config.Integer(
+        "Flow AI Pin",
+        default=4,
+        show_if=config.equal(flow_source_type, SourceType.ANALOGUE_IN),
+    )
+    flow_range_low_m3h = config.Number(
+        "Flow Range Low (m3/h)",
+        default=0.0,
+        show_if=config.equal(flow_source_type, SourceType.ANALOGUE_IN),
+    )
+    flow_range_high_m3h = config.Number(
+        "Flow Range High (m3/h)",
+        default=200.0,
+        show_if=config.equal(flow_source_type, SourceType.ANALOGUE_IN),
+    )
     flow_tag = ScaledTagRef(
         "Flow Tag",
         default=None,
         description="Tag carrying measured flow. Scale/offset must yield m3/h.",
         reference_name__default="flow_input",
         reference_name__hidden=True,
+        show_if=config.equal(flow_source_type, SourceType.TAG),
     )
 
     # -------------------------------------------------------------- speed
@@ -172,15 +207,28 @@ class PumpAnalysisConfig(config.Schema):
         default=SourceType.TAG,
         description="Engine speed. Usually a tag from the engine controller app (e.g. kensho engine_rpm).",
     )
-    speed_ai_pin = config.Integer("Speed AI Pin", default=5)
-    speed_range_low_rpm = config.Number("Speed Range Low (RPM)", default=0.0)
-    speed_range_high_rpm = config.Number("Speed Range High (RPM)", default=3000.0)
+    speed_ai_pin = config.Integer(
+        "Speed AI Pin",
+        default=5,
+        show_if=config.equal(speed_source_type, SourceType.ANALOGUE_IN),
+    )
+    speed_range_low_rpm = config.Number(
+        "Speed Range Low (RPM)",
+        default=0.0,
+        show_if=config.equal(speed_source_type, SourceType.ANALOGUE_IN),
+    )
+    speed_range_high_rpm = config.Number(
+        "Speed Range High (RPM)",
+        default=3000.0,
+        show_if=config.equal(speed_source_type, SourceType.ANALOGUE_IN),
+    )
     speed_tag = ScaledTagRef(
         "Speed Tag",
         default=None,
         description="Tag carrying engine RPM.",
         reference_name__default="speed_input",
         reference_name__hidden=True,
+        show_if=config.equal(speed_source_type, SourceType.TAG),
     )
     pump_speed_ratio = config.Number(
         "Pump Speed Ratio",
@@ -313,28 +361,25 @@ class PumpAnalysisConfig(config.Schema):
         description="For SET_TAG: the tag to write (e.g. an engine controller stop command).",
         reference_name__default="trip_command",
         reference_name__hidden=True,
+        show_if=config.equal(trip_action, TripAction.SET_TAG),
     )
     trip_tag_value = config.String(
         "Trip Tag Value",
         default="true",
-        description="Value written to the trip tag. Parsed as JSON where possible (true, 0, \"stop\").",
+        description='Value written to the trip tag. Parsed as JSON where possible (true, 0, "stop").',
+        show_if=config.equal(trip_action, TripAction.SET_TAG),
     )
     trip_do_pin = config.Integer(
         "Trip DO Pin",
         default=None,
         description="For DIGITAL_OUTPUT: the doovit DO wired to the panel stop input.",
+        show_if=config.equal(trip_action, TripAction.DIGITAL_OUTPUT),
     )
     trip_do_value = config.Boolean(
         "Trip DO Value",
         default=True,
         description="Level driven onto the trip DO when tripping.",
-    )
-
-    # ---------------------------------------------------------------- widget
-    dv_widget_url = config.String(
-        "DV Widget URL",
-        default=None,
-        description="URL of the pump-curve widget bundle (Module Federation remote entry).",
+        show_if=config.equal(trip_action, TripAction.DIGITAL_OUTPUT),
     )
 
     # ------------------------------------------------------------- helpers

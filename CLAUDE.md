@@ -1,6 +1,6 @@
 # Pump Analysis — working notes for Claude
 
-Pump operating-point / cavitation-margin analysis on the Doover platform, using pydoover 1.0.
+Pump operating-point / cavitation-margin analysis on the Doover platform, using pydoover 1.12+.
 Leachate-telemetry-style layout: a shared workspace package + thin app packages.
 
 ## Commands
@@ -47,11 +47,36 @@ simulators/pump/                # synthetic pump: normal -> cavitating sweep eve
 - **Trip defaults to `NONE`** (alert-only). The trip latches (`ProtectionMonitor.tripped`)
   until reset from the UI. Never wire `Application.request_shutdown()` for the pump trip —
   that shuts down the *doovit*.
+- **`widget/src/lib/` is un-ignored explicitly** in `.gitignore` — the Python `lib/`
+  rule otherwise swallows it, and widget sources silently never get committed.
 - **Inferred flow always ships with `flow_confidence`**; ambiguous curve inversions are capped
   at 0.5. Don't present inferred flow as a measurement.
 - Widget MF contract: rsbuild `name: "PumpAnalysisWidget"`, expose `./PumpAnalysisWidget` —
   must match `scope`/`module` in `app_ui.py`'s RemoteComponent. Build tooling is
   **rsbuild/rspack**, not webpack.
+
+## pydoover conventions used here
+
+- **Typed tag declarations** — `tags.Number/Boolean/String(default=..., live=..., log_on=...)`
+  (keyword-only), not the generic `Tag("number", ...)` form.
+- **`live=True`** on the values an operator watches in real time. Live tags are only
+  republished while somebody has them open in live mode, so they cost nothing otherwise.
+- **`log_on=`** auto-log triggers for the events worth pinning in history:
+  `tags.AnyChange()` on `state` / `tripped` / `flow_origin`, `tags.Cross(0.0, deadband=0.2)`
+  on `npsh_margin_m`.
+- **`show_if=config.equal(<sibling>, <value>)`** gates source-specific config: AI pin/range
+  fields show for `ANALOGUE_IN`, the TagRef for `TAG`, trip fields per `TripAction`. Gated
+  fields move out of `properties` into `allOf` branches in the exported schema, but still
+  load their defaults at runtime — `.value` reads stay safe.
+- **App placement elements** (`config.ApplicationPosition/DefaultOpen/InterpreterHidden/
+  FullWidth`) back the `$config.app()....` lookups `ui.UI` emits by default.
+- **Notifications carry `title=` and `topic=NOTIFY_TOPIC`** so subscriptions can filter.
+- **The processor's lambda `handler` lives in `src/pump_analysis_processor/__init__.py`**
+  and calls `clear_elements()` / `_load_elements()` first — config elements are class-level
+  state and a warm lambda container would otherwise reuse the last invocation's schema.
+- **`doover_config.json` carries the publish wiring**: `export_config_command`,
+  `export_ui_command`, `widget` + `build_widget_command`, and `lambda_config`
+  (`Handler: pump_analysis_processor.handler`) for the processor.
 
 ## Local simulation (works on macOS)
 
