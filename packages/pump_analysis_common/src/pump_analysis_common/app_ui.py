@@ -94,23 +94,24 @@ class PumpAnalysisUI(ui.UI):
             span = d_hi - d_lo
             discharge.ranges = [
                 ui.Range("Low", round(d_lo * pf, 2), round((d_lo + 0.25 * span) * pf, 2), ui.Colour.yellow),
-                ui.Range("Normal", round((d_lo + 0.25 * span) * pf, 2), round((d_lo + 0.85 * span) * pf, 2), ui.Colour.green),
+                ui.Range("Normal", round((d_lo + 0.25 * span) * pf, 2), round((d_lo + 0.85 * span) * pf, 2),
+                         ui.Colour.green),
                 ui.Range("High", round((d_lo + 0.85 * span) * pf, 2), round(d_hi * pf, 2), ui.Colour.yellow),
             ]
 
     # ---- warnings (visibility driven by *_hidden tags; they render only when
     #      the condition is live, so they cost nothing on a healthy pump)
     tripped_warning = ui.WarningIndicator(
-        "tripped_warning", "Pump TRIPPED — reset required", hidden=T.tripped_warning_hidden
+        "Pump TRIPPED — reset required", hidden=T.tripped_warning_hidden
     )
     danger_warning = ui.WarningIndicator(
-        "danger_warning", "Cavitation risk: NPSH margin critical", hidden=T.danger_warning_hidden
+        "Cavitation risk: NPSH margin critical", hidden=T.danger_warning_hidden
     )
     marginal_warning = ui.WarningIndicator(
-        "marginal_warning", "NPSH margin marginal", hidden=T.marginal_warning_hidden
+        "NPSH margin marginal", hidden=T.marginal_warning_hidden
     )
     fault_warning = ui.WarningIndicator(
-        "fault_warning", "Sensor / configuration fault", hidden=T.fault_warning_hidden
+        "Sensor / configuration fault", hidden=T.fault_warning_hidden
     )
 
     # ---- headline values, above the curve widget
