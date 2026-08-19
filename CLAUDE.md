@@ -38,10 +38,12 @@ simulators/pump/                # synthetic pump: normal -> cavitating sweep eve
 
 - **`pump_math.py` / `curve.py` / `engine.py` / `protection.py` import no pydoover.** They are
   golden-tested against hand-worked numbers; keep them pure.
-- **Config display names ARE the runtime keys.** `deployment_config` keys derive from
-  sanitised display names, not Python attribute names. The widget reads those keys
-  (`widget/src/lib/pump.ts`) and `tests/test_imports.py::test_config_schema` pins them.
-  Rename display name + widget key + test together, or not at all.
+- **Every config element carries an explicit `name=`** (kensho-controller convention).
+  That name is the `deployment_config` key — display names are free to be reworded.
+  The widget reads those keys (`widget/src/lib/pump.ts`) and
+  `tests/test_imports.py::test_config_schema` pins them, so changing a `name=` means
+  changing the widget key and the test with it. Without `name=`, pydoover falls back to
+  the sanitised display name, which is what made this fragile in the first place.
 - **TagRef config elements must stay top-level** on the schema — RemoteTag resolution only
   scans top-level TagRefs. Don't nest them in config.Object groups.
 - **Trip defaults to `NONE`** (alert-only). The trip latches (`ProtectionMonitor.tripped`)

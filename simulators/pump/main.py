@@ -41,7 +41,7 @@ class PumpSimulator(Application):
         sag = math.sin(phase * math.pi)  # 0 -> 1 -> 0 across the cycle
         suction = -0.25 - 0.60 * sag + random.gauss(0, 0.01)
 
-        # Discharge follows the curve-ish head at ~95 m3/h, dropping as
+        # Discharge follows the curve-ish head at ~95 m³/h, dropping as
         # cavitation develops (head collapse is the classic signature).
         healthy_head_bar = 4.5 * (rpm / REFERENCE_RPM) ** 2
         collapse = 0.35 * max(0.0, sag - 0.7) / 0.3  # only near full sag
