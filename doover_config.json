@@ -26,40 +26,40 @@
             "type": "uiApplication",
             "name": "$config.app().APP_KEY",
             "children": {
-                "tripped_warning": {
-                    "name": "tripped_warning",
+                "pump_tripped__reset_required": {
+                    "name": "pump_tripped__reset_required",
                     "type": "uiWarningIndicator",
-                    "displayString": "tripped_warning",
+                    "displayString": "Pump TRIPPED \u2014 reset required",
                     "position": 51,
                     "hidden": "$tag.app().tripped_warning_hidden:boolean:true",
-                    "currentValue": "Pump TRIPPED \u2014 reset required",
+                    "currentValue": "$cmds.app().pump_tripped__reset_required",
                     "can_cancel": true
                 },
-                "danger_warning": {
-                    "name": "danger_warning",
+                "cavitation_risk_npsh_margin_critical": {
+                    "name": "cavitation_risk_npsh_margin_critical",
                     "type": "uiWarningIndicator",
-                    "displayString": "danger_warning",
+                    "displayString": "Cavitation risk: NPSH margin critical",
                     "position": 52,
                     "hidden": "$tag.app().danger_warning_hidden:boolean:true",
-                    "currentValue": "Cavitation risk: NPSH margin critical",
+                    "currentValue": "$cmds.app().cavitation_risk_npsh_margin_critical",
                     "can_cancel": true
                 },
-                "marginal_warning": {
-                    "name": "marginal_warning",
+                "npsh_margin_marginal": {
+                    "name": "npsh_margin_marginal",
                     "type": "uiWarningIndicator",
-                    "displayString": "marginal_warning",
+                    "displayString": "NPSH margin marginal",
                     "position": 53,
                     "hidden": "$tag.app().marginal_warning_hidden:boolean:true",
-                    "currentValue": "NPSH margin marginal",
+                    "currentValue": "$cmds.app().npsh_margin_marginal",
                     "can_cancel": true
                 },
-                "fault_warning": {
-                    "name": "fault_warning",
+                "sensor__configuration_fault": {
+                    "name": "sensor__configuration_fault",
                     "type": "uiWarningIndicator",
-                    "displayString": "fault_warning",
+                    "displayString": "Sensor / configuration fault",
                     "position": 54,
                     "hidden": "$tag.app().fault_warning_hidden:boolean:true",
-                    "currentValue": "Sensor / configuration fault",
+                    "currentValue": "$cmds.app().sensor__configuration_fault",
                     "can_cancel": true
                 },
                 "calculated_flow": {
@@ -526,6 +526,21 @@
                     "minimum": 0.0,
                     "maximum": 100.0
                 },
+                "fluid_specific_gravity": {
+                    "title": "Fluid Specific Gravity",
+                    "x-name": "fluid_specific_gravity",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Density of the pumped fluid relative to water (1.0 = water, ~1.3 for mine tailwater). Head is derived from a pressure rise, so leaving this at water over-reads head \u2014 and therefore inferred flow \u2014 by roughly the SG itself. Blank = water at the temperature above.",
+                    "default": null,
+                    "x-position": 25,
+                    "minimum": 0.5,
+                    "maximum": 3.0
+                },
                 "show_widget_gauges": {
                     "title": "Show Widget Gauges",
                     "x-name": "show_widget_gauges",
@@ -537,7 +552,7 @@
                     "x-required": false,
                     "description": "Show flow/margin gauges inside the pump-curve widget. Testing aid \u2014 production installs use the native gauge variables instead.",
                     "default": false,
-                    "x-position": 25,
+                    "x-position": 26,
                     "x-advanced": true
                 },
                 "flow_display_units": {
@@ -556,7 +571,7 @@
                     "x-required": false,
                     "description": "Units flow is displayed in (UI and widget). Internal maths and the curve stay in m\u00b3/h.",
                     "default": "ml_per_day",
-                    "x-position": 26
+                    "x-position": 27
                 },
                 "pressure_display_units": {
                     "enum": [
@@ -575,7 +590,7 @@
                     "x-required": false,
                     "description": "Units inlet/discharge pressure are displayed in. Metres of head is density-corrected at the default water temperature. Internal maths stays in bar/kPa.",
                     "default": "metres_head",
-                    "x-position": 27
+                    "x-position": 28
                 },
                 "bep_flow_m3h": {
                     "title": "BEP Flow (m\u00b3/h)",
@@ -588,7 +603,7 @@
                     "x-required": false,
                     "description": "Best-efficiency-point flow at the curve reference speed, from the manufacturer. Enables the efficient-zone shading and % of BEP output.",
                     "default": null,
-                    "x-position": 28,
+                    "x-position": 29,
                     "minimum": 0.0
                 },
                 "pump_curve": {
@@ -598,7 +613,7 @@
                     "type": "array",
                     "x-required": true,
                     "description": "Manufacturer head-flow(-NPSHr) points at the reference speed. Digitise from the datasheet.",
-                    "x-position": 29,
+                    "x-position": 30,
                     "items": {
                         "title": "Point",
                         "x-name": "point",
@@ -670,7 +685,7 @@
                     "x-required": false,
                     "description": "Pump speed the curve points were published at.",
                     "default": null,
-                    "x-position": 30,
+                    "x-position": 31,
                     "minimum": 1.0,
                     "maximum": 10000.0
                 },
@@ -685,7 +700,7 @@
                     "x-required": false,
                     "description": "Metres above sea level; sets barometric pressure for NPSHa. Worth getting right \u2014 every 1000 m costs about 1.1 m of NPSHa.",
                     "default": 0.0,
-                    "x-position": 31,
+                    "x-position": 32,
                     "minimum": -500.0,
                     "maximum": 6000.0
                 },
@@ -700,7 +715,7 @@
                     "x-required": false,
                     "description": "Discharge gauge height minus suction gauge height.",
                     "default": 0.0,
-                    "x-position": 32
+                    "x-position": 33
                 },
                 "suction_gauge_height_above_impeller_m": {
                     "title": "Suction Gauge Height Above Impeller (m)",
@@ -713,7 +728,7 @@
                     "x-required": false,
                     "description": "Height of the suction tapping above the impeller eye (negative if below).",
                     "default": 0.0,
-                    "x-position": 33
+                    "x-position": 34
                 },
                 "suction_pipe_id_mm": {
                     "title": "Suction Pipe ID (mm)",
@@ -726,7 +741,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 34,
+                    "x-position": 35,
                     "x-advanced": true,
                     "minimum": 1.0,
                     "maximum": 5000.0
@@ -742,7 +757,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 35,
+                    "x-position": 36,
                     "x-advanced": true,
                     "minimum": 1.0,
                     "maximum": 5000.0
@@ -758,7 +773,7 @@
                     "x-required": false,
                     "description": "Below this PUMP speed the pump is treated as not running and no hydraulic outputs are produced. Remember this is engine rpm through Pump Speed Ratio, not engine rpm itself.",
                     "default": 300.0,
-                    "x-position": 36,
+                    "x-position": 37,
                     "minimum": 0.0,
                     "maximum": 10000.0
                 },
@@ -773,7 +788,7 @@
                     "x-required": false,
                     "description": "Alerts and trips are suppressed for this long after the pump starts (priming).",
                     "default": 60.0,
-                    "x-position": 37,
+                    "x-position": 38,
                     "minimum": 0.0,
                     "maximum": 3600.0
                 },
@@ -788,7 +803,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this raises the marginal alert.",
                     "default": 1.5,
-                    "x-position": 38,
+                    "x-position": 39,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -803,7 +818,22 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this is the danger/trip condition.",
                     "default": 0.5,
-                    "x-position": 39,
+                    "x-position": 40,
+                    "minimum": 0.0,
+                    "maximum": 50.0
+                },
+                "minimum_npsha_m": {
+                    "title": "Minimum NPSHa (m)",
+                    "x-name": "minimum_npsha_m",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Curve-independent cavitation backstop: NPSHa below this is DANGER whatever the pump's NPSHr is, and within one warning margin above it is MARGINAL. This is what still protects the pump when flow (and therefore NPSHr) can't be inferred \u2014 e.g. the operating point has wandered off the configured curve. 0 disables it.",
+                    "default": 1.5,
+                    "x-position": 41,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -818,7 +848,7 @@
                     "x-required": false,
                     "description": "A condition must persist this long before an alert is sent.",
                     "default": 30.0,
-                    "x-position": 40,
+                    "x-position": 42,
                     "x-advanced": true,
                     "minimum": 0.0,
                     "maximum": 3600.0
@@ -834,7 +864,7 @@
                     "x-required": false,
                     "description": "DANGER must persist this long before the trip action fires.",
                     "default": 10.0,
-                    "x-position": 41,
+                    "x-position": 43,
                     "x-advanced": true,
                     "minimum": 0.0,
                     "maximum": 3600.0
@@ -855,7 +885,7 @@
                     "x-required": false,
                     "description": "NONE = alert only (commissioning default). Arm per pump only after thresholds are proven on site.",
                     "default": "none",
-                    "x-position": 42
+                    "x-position": 44
                 }
             },
             "additionalElements": true,
@@ -1557,7 +1587,7 @@
                                 "x-required": false,
                                 "description": "For SET_TAG: the tag to write (e.g. an engine controller stop command).",
                                 "default": null,
-                                "x-position": 43,
+                                "x-position": 45,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -1626,7 +1656,7 @@
                                 "x-required": false,
                                 "description": "Value written to the trip tag. Parsed as JSON where possible (true, 0, \"stop\").",
                                 "default": "true",
-                                "x-position": 44
+                                "x-position": 46
                             }
                         }
                     }
@@ -1655,7 +1685,7 @@
                                 "x-required": false,
                                 "description": "For DIGITAL_OUTPUT: the doovit DO wired to the panel stop input.",
                                 "default": null,
-                                "x-position": 45,
+                                "x-position": 47,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -1670,7 +1700,7 @@
                                 "x-required": false,
                                 "description": "Level driven onto the trip DO when tripping.",
                                 "default": true,
-                                "x-position": 46
+                                "x-position": 48
                             }
                         }
                     }
@@ -1712,40 +1742,40 @@
             "type": "uiApplication",
             "name": "$config.app().APP_KEY",
             "children": {
-                "tripped_warning": {
-                    "name": "tripped_warning",
+                "pump_tripped__reset_required": {
+                    "name": "pump_tripped__reset_required",
                     "type": "uiWarningIndicator",
-                    "displayString": "tripped_warning",
+                    "displayString": "Pump TRIPPED \u2014 reset required",
                     "position": 51,
                     "hidden": "$tag.app().tripped_warning_hidden:boolean:true",
-                    "currentValue": "Pump TRIPPED \u2014 reset required",
+                    "currentValue": "$cmds.app().pump_tripped__reset_required",
                     "can_cancel": true
                 },
-                "danger_warning": {
-                    "name": "danger_warning",
+                "cavitation_risk_npsh_margin_critical": {
+                    "name": "cavitation_risk_npsh_margin_critical",
                     "type": "uiWarningIndicator",
-                    "displayString": "danger_warning",
+                    "displayString": "Cavitation risk: NPSH margin critical",
                     "position": 52,
                     "hidden": "$tag.app().danger_warning_hidden:boolean:true",
-                    "currentValue": "Cavitation risk: NPSH margin critical",
+                    "currentValue": "$cmds.app().cavitation_risk_npsh_margin_critical",
                     "can_cancel": true
                 },
-                "marginal_warning": {
-                    "name": "marginal_warning",
+                "npsh_margin_marginal": {
+                    "name": "npsh_margin_marginal",
                     "type": "uiWarningIndicator",
-                    "displayString": "marginal_warning",
+                    "displayString": "NPSH margin marginal",
                     "position": 53,
                     "hidden": "$tag.app().marginal_warning_hidden:boolean:true",
-                    "currentValue": "NPSH margin marginal",
+                    "currentValue": "$cmds.app().npsh_margin_marginal",
                     "can_cancel": true
                 },
-                "fault_warning": {
-                    "name": "fault_warning",
+                "sensor__configuration_fault": {
+                    "name": "sensor__configuration_fault",
                     "type": "uiWarningIndicator",
-                    "displayString": "fault_warning",
+                    "displayString": "Sensor / configuration fault",
                     "position": 54,
                     "hidden": "$tag.app().fault_warning_hidden:boolean:true",
-                    "currentValue": "Sensor / configuration fault",
+                    "currentValue": "$cmds.app().sensor__configuration_fault",
                     "can_cancel": true
                 },
                 "calculated_flow": {
@@ -2212,6 +2242,21 @@
                     "minimum": 0.0,
                     "maximum": 100.0
                 },
+                "fluid_specific_gravity": {
+                    "title": "Fluid Specific Gravity",
+                    "x-name": "fluid_specific_gravity",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Density of the pumped fluid relative to water (1.0 = water, ~1.3 for mine tailwater). Head is derived from a pressure rise, so leaving this at water over-reads head \u2014 and therefore inferred flow \u2014 by roughly the SG itself. Blank = water at the temperature above.",
+                    "default": null,
+                    "x-position": 25,
+                    "minimum": 0.5,
+                    "maximum": 3.0
+                },
                 "show_widget_gauges": {
                     "title": "Show Widget Gauges",
                     "x-name": "show_widget_gauges",
@@ -2223,7 +2268,7 @@
                     "x-required": false,
                     "description": "Show flow/margin gauges inside the pump-curve widget. Testing aid \u2014 production installs use the native gauge variables instead.",
                     "default": false,
-                    "x-position": 25,
+                    "x-position": 26,
                     "x-advanced": true
                 },
                 "flow_display_units": {
@@ -2242,7 +2287,7 @@
                     "x-required": false,
                     "description": "Units flow is displayed in (UI and widget). Internal maths and the curve stay in m\u00b3/h.",
                     "default": "ml_per_day",
-                    "x-position": 26
+                    "x-position": 27
                 },
                 "pressure_display_units": {
                     "enum": [
@@ -2261,7 +2306,7 @@
                     "x-required": false,
                     "description": "Units inlet/discharge pressure are displayed in. Metres of head is density-corrected at the default water temperature. Internal maths stays in bar/kPa.",
                     "default": "metres_head",
-                    "x-position": 27
+                    "x-position": 28
                 },
                 "bep_flow_m3h": {
                     "title": "BEP Flow (m\u00b3/h)",
@@ -2274,7 +2319,7 @@
                     "x-required": false,
                     "description": "Best-efficiency-point flow at the curve reference speed, from the manufacturer. Enables the efficient-zone shading and % of BEP output.",
                     "default": null,
-                    "x-position": 28,
+                    "x-position": 29,
                     "minimum": 0.0
                 },
                 "pump_curve": {
@@ -2284,7 +2329,7 @@
                     "type": "array",
                     "x-required": true,
                     "description": "Manufacturer head-flow(-NPSHr) points at the reference speed. Digitise from the datasheet.",
-                    "x-position": 29,
+                    "x-position": 30,
                     "items": {
                         "title": "Point",
                         "x-name": "point",
@@ -2356,7 +2401,7 @@
                     "x-required": false,
                     "description": "Pump speed the curve points were published at.",
                     "default": null,
-                    "x-position": 30,
+                    "x-position": 31,
                     "minimum": 1.0,
                     "maximum": 10000.0
                 },
@@ -2371,7 +2416,7 @@
                     "x-required": false,
                     "description": "Metres above sea level; sets barometric pressure for NPSHa. Worth getting right \u2014 every 1000 m costs about 1.1 m of NPSHa.",
                     "default": 0.0,
-                    "x-position": 31,
+                    "x-position": 32,
                     "minimum": -500.0,
                     "maximum": 6000.0
                 },
@@ -2386,7 +2431,7 @@
                     "x-required": false,
                     "description": "Discharge gauge height minus suction gauge height.",
                     "default": 0.0,
-                    "x-position": 32
+                    "x-position": 33
                 },
                 "suction_gauge_height_above_impeller_m": {
                     "title": "Suction Gauge Height Above Impeller (m)",
@@ -2399,7 +2444,7 @@
                     "x-required": false,
                     "description": "Height of the suction tapping above the impeller eye (negative if below).",
                     "default": 0.0,
-                    "x-position": 33
+                    "x-position": 34
                 },
                 "suction_pipe_id_mm": {
                     "title": "Suction Pipe ID (mm)",
@@ -2412,7 +2457,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 34,
+                    "x-position": 35,
                     "x-advanced": true,
                     "minimum": 1.0,
                     "maximum": 5000.0
@@ -2428,7 +2473,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 35,
+                    "x-position": 36,
                     "x-advanced": true,
                     "minimum": 1.0,
                     "maximum": 5000.0
@@ -2444,7 +2489,7 @@
                     "x-required": false,
                     "description": "Below this PUMP speed the pump is treated as not running and no hydraulic outputs are produced. Remember this is engine rpm through Pump Speed Ratio, not engine rpm itself.",
                     "default": 300.0,
-                    "x-position": 36,
+                    "x-position": 37,
                     "minimum": 0.0,
                     "maximum": 10000.0
                 },
@@ -2459,7 +2504,7 @@
                     "x-required": false,
                     "description": "Alerts and trips are suppressed for this long after the pump starts (priming).",
                     "default": 60.0,
-                    "x-position": 37,
+                    "x-position": 38,
                     "minimum": 0.0,
                     "maximum": 3600.0
                 },
@@ -2474,7 +2519,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this raises the marginal alert.",
                     "default": 1.5,
-                    "x-position": 38,
+                    "x-position": 39,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -2489,7 +2534,22 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this is the danger/trip condition.",
                     "default": 0.5,
-                    "x-position": 39,
+                    "x-position": 40,
+                    "minimum": 0.0,
+                    "maximum": 50.0
+                },
+                "minimum_npsha_m": {
+                    "title": "Minimum NPSHa (m)",
+                    "x-name": "minimum_npsha_m",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Curve-independent cavitation backstop: NPSHa below this is DANGER whatever the pump's NPSHr is, and within one warning margin above it is MARGINAL. This is what still protects the pump when flow (and therefore NPSHr) can't be inferred \u2014 e.g. the operating point has wandered off the configured curve. 0 disables it.",
+                    "default": 1.5,
+                    "x-position": 41,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -2504,7 +2564,7 @@
                     "x-required": false,
                     "description": "A condition must persist this long before an alert is sent.",
                     "default": 30.0,
-                    "x-position": 40,
+                    "x-position": 42,
                     "x-advanced": true,
                     "minimum": 0.0,
                     "maximum": 3600.0
@@ -2520,7 +2580,7 @@
                     "x-required": false,
                     "description": "DANGER must persist this long before the trip action fires.",
                     "default": 10.0,
-                    "x-position": 41,
+                    "x-position": 43,
                     "x-advanced": true,
                     "minimum": 0.0,
                     "maximum": 3600.0
@@ -2541,7 +2601,7 @@
                     "x-required": false,
                     "description": "NONE = alert only (commissioning default). Arm per pump only after thresholds are proven on site.",
                     "default": "none",
-                    "x-position": 42
+                    "x-position": 44
                 },
                 "dv_proc_subscriptions": {
                     "title": "Subscription",
@@ -2556,7 +2616,7 @@
                     "default": [
                         "tag_values"
                     ],
-                    "x-position": 47,
+                    "x-position": 49,
                     "items": {
                         "title": "Channel Subscription",
                         "x-name": "dv_proc_subscription",
@@ -2573,7 +2633,7 @@
                     "type": "object",
                     "x-required": true,
                     "description": "Framework-level processor runtime config.",
-                    "x-position": 48,
+                    "x-position": 50,
                     "properties": {
                         "log_level": {
                             "enum": [
@@ -3388,7 +3448,7 @@
                                 "x-required": false,
                                 "description": "For SET_TAG: the tag to write (e.g. an engine controller stop command).",
                                 "default": null,
-                                "x-position": 43,
+                                "x-position": 45,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -3457,7 +3517,7 @@
                                 "x-required": false,
                                 "description": "Value written to the trip tag. Parsed as JSON where possible (true, 0, \"stop\").",
                                 "default": "true",
-                                "x-position": 44
+                                "x-position": 46
                             }
                         }
                     }
@@ -3486,7 +3546,7 @@
                                 "x-required": false,
                                 "description": "For DIGITAL_OUTPUT: the doovit DO wired to the panel stop input.",
                                 "default": null,
-                                "x-position": 45,
+                                "x-position": 47,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -3501,7 +3561,7 @@
                                 "x-required": false,
                                 "description": "Level driven onto the trip DO when tripping.",
                                 "default": true,
-                                "x-position": 46
+                                "x-position": 48
                             }
                         }
                     }

@@ -413,6 +413,20 @@ class PumpAnalysisConfig(config.Schema):
         maximum=100.0,
         name="default_water_temperature_c",
     )
+    fluid_specific_gravity = config.Number(
+        "Fluid Specific Gravity",
+        description=(
+            "Density of the pumped fluid relative to water (1.0 = water, ~1.3 "
+            "for mine tailwater). Head is derived from a pressure rise, so "
+            "leaving this at water over-reads head — and therefore inferred "
+            "flow — by roughly the SG itself. Blank = water at the temperature "
+            "above."
+        ),
+        default=None,
+        minimum=0.5,
+        maximum=3.0,
+        name="fluid_specific_gravity",
+    )
 
     # --- Display ---
     show_widget_gauges = config.Boolean(
@@ -556,6 +570,20 @@ class PumpAnalysisConfig(config.Schema):
         maximum=50.0,
         name="npsh_danger_margin_m",
     )
+    minimum_npsha_m = config.Number(
+        "Minimum NPSHa (m)",
+        description=(
+            "Curve-independent cavitation backstop: NPSHa below this is DANGER "
+            "whatever the pump's NPSHr is, and within one warning margin above "
+            "it is MARGINAL. This is what still protects the pump when flow "
+            "(and therefore NPSHr) can't be inferred — e.g. the operating point "
+            "has wandered off the configured curve. 0 disables it."
+        ),
+        default=1.5,
+        minimum=0.0,
+        maximum=50.0,
+        name="minimum_npsha_m",
+    )
     alert_debounce_seconds = config.Number(
         "Alert Debounce (Seconds)",
         description="A condition must persist this long before an alert is sent.",
@@ -650,11 +678,13 @@ class PumpAnalysisConfig(config.Schema):
             suction_pipe_id_mm=self.suction_pipe_id_mm.value,
             discharge_pipe_id_mm=self.discharge_pipe_id_mm.value,
             default_water_temp_c=self.default_water_temperature_c.value or 20.0,
+            fluid_sg=self.fluid_specific_gravity.value,
             speed_ratio=self.pump_speed_ratio.value or 1.0,
             speed_offset=self.pump_speed_offset_rpm.value or 0.0,
             min_running_rpm=self.minimum_running_speed_rpm.value or 300.0,
             npsh_warning_margin_m=self.npsh_warning_margin_m.value or 1.5,
             npsh_danger_margin_m=self.npsh_danger_margin_m.value or 0.5,
+            min_npsha_m=self.minimum_npsha_m.value,
             bep_flow_m3h=self.bep_flow_m3h.value,
         )
 

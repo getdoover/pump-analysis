@@ -228,6 +228,93 @@ class TestEngine:
         assert r.npsh_margin_m is None
 
 
+class TestCurveIndependentProtection:
+    """The NPSHa floor and the config-fault state.
+
+    The margin test needs NPSHr, which needs flow, which needs the operating
+    point to sit on the configured curve — so on its own it goes quiet exactly
+    when the curve is wrong. These cover the backstop.
+    """
+
+    # ΔP 0.5 bar at 1800 rpm scales to ~5 m of head, below the curve's 10 m
+    # run-out point, so the inversion fails and NPSHr is unknown.
+    OFF_CURVE_HEALTHY = Readings(0.2, 0.7, 1800.0)
+    OFF_CURVE_STARVED = Readings(-0.92, -0.42, 1800.0)
+
+    def test_off_curve_is_reported_not_swallowed(self):
+        r = analyse(self.OFF_CURVE_HEALTHY, REF_CURVE, PARAMS)
+        assert r.flow_m3h is None
+        assert r.npshr_m is None
+        assert r.npsh_margin_m is None
+        assert "operating point off the configured curve" in r.faults
+
+    def test_off_curve_does_not_read_as_healthy(self):
+        r = analyse(self.OFF_CURVE_HEALTHY, REF_CURVE, PARAMS)
+        assert r.state is AlertState.CONFIG_FAULT
+
+    def test_npsha_floor_still_protects_off_curve(self):
+        r = analyse(self.OFF_CURVE_STARVED, REF_CURVE, PARAMS)
+        # No margin to test against, but NPSHa alone is damning.
+        assert r.npsh_margin_m is None
+        assert r.npsha_m < PARAMS.min_npsha_m
+        assert r.state is AlertState.DANGER
+
+    def test_npsha_floor_warns_in_the_band_above(self):
+        params = SiteParams(min_npsha_m=1.5, npsh_warning_margin_m=1.5)
+        r = analyse(Readings(-0.75, -0.25, 1800.0), REF_CURVE, params)
+        assert 1.5 <= r.npsha_m < 3.0
+        assert r.state is AlertState.MARGINAL
+
+    def test_floor_can_be_disabled(self):
+        params = SiteParams(min_npsha_m=0.0, min_running_rpm=300.0)
+        r = analyse(self.OFF_CURVE_STARVED, REF_CURVE, params)
+        assert r.npsha_m < 1.5
+        assert r.state is AlertState.CONFIG_FAULT  # fault only, no cavitation alarm
+
+    def test_danger_is_never_downgraded_by_a_later_rule(self):
+        # Margin says DANGER; the floor would only say MARGINAL; faults would
+        # only say CONFIG_FAULT. DANGER has to survive both.
+        r = analyse(Readings(-0.85, 3.65, 1800.0), REF_CURVE, PARAMS)
+        assert r.state is AlertState.DANGER
+
+    def test_start_inhibit_outranks_the_floor(self):
+        r = analyse(
+            self.OFF_CURVE_STARVED, REF_CURVE, PARAMS, in_start_inhibit=True
+        )
+        assert r.state is AlertState.STARTING
+
+
+class TestFluidDensity:
+    def test_slurry_head_is_lower_than_water_for_the_same_pressure_rise(self):
+        water = analyse(Readings(-0.3, 4.2, 1800.0), None, PARAMS)
+        slurry = analyse(
+            Readings(-0.3, 4.2, 1800.0),
+            None,
+            SiteParams(fluid_sg=1.3, min_running_rpm=300.0),
+        )
+        # Same ΔP, denser fluid → fewer metres of head, by the SG ratio.
+        assert slurry.tdh_m == pytest.approx(water.tdh_m * (998.2 / 1300.0), rel=0.01)
+
+    def test_slurry_lowers_npsha(self):
+        r = analyse(
+            Readings(-0.3, 4.2, 1800.0),
+            None,
+            SiteParams(fluid_sg=1.3, min_running_rpm=300.0),
+        )
+        water = analyse(Readings(-0.3, 4.2, 1800.0), None, PARAMS)
+        assert r.npsha_m < water.npsha_m
+
+    def test_sg_of_one_matches_water_at_20c(self):
+        sg = analyse(
+            Readings(-0.3, 4.2, 1800.0),
+            None,
+            SiteParams(fluid_sg=1.0, min_running_rpm=300.0),
+        )
+        water = analyse(Readings(-0.3, 4.2, 1800.0), None, PARAMS)
+        # 1.0 SG is 1000 kg/m³ exactly; water at 20 °C is 998.2 — close, not equal.
+        assert sg.tdh_m == pytest.approx(water.tdh_m, rel=0.002)
+
+
 class TestPressureUnits:
     def test_metres_head_per_bar_at_20c(self):
         # 100 kPa / (998.2 * 9.80665) ≈ 10.21 m

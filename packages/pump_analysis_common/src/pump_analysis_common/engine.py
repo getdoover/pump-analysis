@@ -27,6 +27,27 @@ class AlertState(enum.Enum):
     MARGINAL = "marginal"  # NPSH margin below warning threshold
     DANGER = "danger"  # NPSH margin below trip threshold
     SENSOR_FAULT = "sensor_fault"
+    # Running and readable, but a config problem means the analysis is
+    # incomplete (e.g. the operating point is off the configured curve, so
+    # there is no NPSHr to compare against).
+    CONFIG_FAULT = "config_fault"
+
+
+#: Ranking used to escalate — never downgrade — the alert state when more than
+#: one rule fires in a cycle.
+_SEVERITY: dict[AlertState, int] = {
+    AlertState.OK: 0,
+    AlertState.CONFIG_FAULT: 1,
+    AlertState.MARGINAL: 2,
+    AlertState.DANGER: 3,
+}
+
+
+def _escalate(current: AlertState, candidate: AlertState) -> AlertState:
+    """The more severe of two states (unknown states never downgrade)."""
+    if _SEVERITY.get(candidate, 0) > _SEVERITY.get(current, 0):
+        return candidate
+    return current
 
 
 @dataclass(frozen=True)
@@ -41,12 +62,22 @@ class SiteParams:
     suction_pipe_id_mm: float | None = None
     discharge_pipe_id_mm: float | None = None
     default_water_temp_c: float = 20.0
+    #: Specific gravity of the pumped fluid (1.0 = water). Tailwater/slurry runs
+    #: heavier, and density scales both the pressure->head conversion and NPSHa,
+    #: so leaving it at water over-reads head by roughly the SG itself.
+    #: None falls back to pure water at the temperature above.
+    fluid_sg: float | None = None
     #: engine→pump speed linear transform
     speed_ratio: float = 1.0
     speed_offset: float = 0.0
     min_running_rpm: float = 300.0
     npsh_warning_margin_m: float = 1.5
     npsh_danger_margin_m: float = 0.5
+    #: Absolute NPSHa floor, m. Curve-independent backstop: an NPSHa this low
+    #: is a cavitation risk whatever the pump's NPSHr turns out to be, so it
+    #: still alerts when flow (and therefore NPSHr) can't be inferred.
+    #: None or 0 disables it.
+    min_npsha_m: float | None = 1.5
     #: best-efficiency-point flow at curve reference speed (manufacturer)
     bep_flow_m3h: float | None = None
 
@@ -125,6 +156,10 @@ def analyse(
         else params.default_water_temp_c
     )
     density = pump_math.water_density_kg_m3(temp_c)
+    if params.fluid_sg:
+        # Temperature still drives vapour pressure (it is a property of the
+        # water in the slurry); density comes from the mixture.
+        density = params.fluid_sg * 1000.0
     baro = pump_math.barometric_pressure_kpa(params.elevation_m)
     vapour = pump_math.water_vapour_pressure_kpa(temp_c)
 
@@ -197,10 +232,28 @@ def analyse(
     # --- state
     r.faults = faults
     if in_start_inhibit:
+        # Priming transients look exactly like cavitation; that is what the
+        # inhibit window is for. Nothing below may override it.
         r.state = AlertState.STARTING
-    elif r.npsh_margin_m is not None:
+        return r
+
+    if r.npsh_margin_m is not None:
         if r.npsh_margin_m < params.npsh_danger_margin_m:
             r.state = AlertState.DANGER
         elif r.npsh_margin_m < params.npsh_warning_margin_m:
             r.state = AlertState.MARGINAL
+
+    # Absolute NPSHa floor. The margin test above needs NPSHr, which needs
+    # flow, which needs the operating point to sit on the configured curve —
+    # so on its own it goes quiet exactly when the curve is wrong. This one
+    # only needs the suction reading.
+    if params.min_npsha_m and r.npsha_m is not None:
+        if r.npsha_m < params.min_npsha_m:
+            r.state = _escalate(r.state, AlertState.DANGER)
+        elif r.npsha_m < params.min_npsha_m + params.npsh_warning_margin_m:
+            r.state = _escalate(r.state, AlertState.MARGINAL)
+
+    # An incomplete analysis must not read as a healthy one.
+    if faults:
+        r.state = _escalate(r.state, AlertState.CONFIG_FAULT)
     return r

@@ -21,8 +21,17 @@ from dataclasses import dataclass, field
 
 from .engine import AlertState
 
+# CONFIG_FAULT is a running state: the pump is turning and readable, only the
+# analysis is incomplete. Leaving it out would clear run_started_at and re-arm
+# the start-inhibit window every time the operating point wandered off the curve.
 RUNNING_STATES = frozenset(
-    {AlertState.OK, AlertState.MARGINAL, AlertState.DANGER, AlertState.STARTING}
+    {
+        AlertState.OK,
+        AlertState.MARGINAL,
+        AlertState.DANGER,
+        AlertState.STARTING,
+        AlertState.CONFIG_FAULT,
+    }
 )
 
 

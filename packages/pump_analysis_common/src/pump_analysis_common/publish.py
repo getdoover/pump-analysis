@@ -54,5 +54,7 @@ async def publish_results(
     await tags.danger_warning_hidden.set(results.state is not AlertState.DANGER)
     await tags.tripped_warning_hidden.set(not monitor.tripped)
     await tags.fault_warning_hidden.set(
-        not faults and results.state is not AlertState.SENSOR_FAULT
+        not faults
+        and results.state
+        not in (AlertState.SENSOR_FAULT, AlertState.CONFIG_FAULT)
     )

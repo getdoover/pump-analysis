@@ -1,6 +1,6 @@
 /* Curve + config helpers for the pump-analysis widget.
 
-   Config keys here are the sanitised-display-name keys of app_config.py —
+   Config keys here are the explicit `name=` keys declared in app_config.py —
    they are asserted by tests/test_imports.py on the Python side. If a key is
    renamed there, rename it here in the same change. */
 
@@ -122,6 +122,7 @@ export const STATE_LABELS: Record<string, string> = {
   marginal: "Marginal",
   danger: "DANGER",
   sensor_fault: "Sensor fault",
+  config_fault: "Config fault",
 };
 
 export const STATE_BADGE: Record<string, "secondary" | "success" | "warning" | "destructive" | "outline"> = {
@@ -131,4 +132,5 @@ export const STATE_BADGE: Record<string, "secondary" | "success" | "warning" | "
   marginal: "warning",
   danger: "destructive",
   sensor_fault: "destructive",
+  config_fault: "warning",
 };

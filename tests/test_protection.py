@@ -86,3 +86,16 @@ class TestTrip:
         m.update(AlertState.MARGINAL, 5.0)  # back to marginal before debounce
         assert not m.update(AlertState.DANGER, 8.0).fire_trip  # timer restarted
         assert not m.tripped
+
+def test_config_fault_counts_as_running():
+    """A pump turning with an incomplete analysis is still running.
+
+    If CONFIG_FAULT fell outside RUNNING_STATES, an operating point drifting off
+    the curve would clear the run timer and re-arm the start-inhibit window —
+    suppressing alerts every time the curve stopped fitting.
+    """
+    from pump_analysis_common.protection import RUNNING_STATES
+
+    assert AlertState.CONFIG_FAULT in RUNNING_STATES
+    assert AlertState.NOT_RUNNING not in RUNNING_STATES
+    assert AlertState.SENSOR_FAULT not in RUNNING_STATES
