@@ -18,21 +18,8 @@
   --paw-warning: 38 92% 50%;
   --paw-success: 142 71% 45%;
 
+  background: hsl(var(--paw-background));
   color: hsl(var(--paw-foreground));
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  .paw-root {
-    --paw-background: 240 10% 3.9%;
-    --paw-foreground: 0 0% 98%;
-    --paw-card: 240 10% 3.9%;
-    --paw-card-foreground: 0 0% 98%;
-    --paw-muted: 240 3.7% 15.9%;
-    --paw-muted-foreground: 240 5% 64.9%;
-    --paw-border: 240 3.7% 15.9%;
-    --paw-primary: 0 0% 98%;
-    --paw-primary-foreground: 240 5.9% 10%;
-  }
 }
