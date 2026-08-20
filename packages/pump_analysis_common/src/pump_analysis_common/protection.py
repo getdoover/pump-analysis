@@ -13,6 +13,10 @@ Semantics:
   debounce.
 - Latch: once tripped, the monitor stays tripped until ``reset()``. Alerts
   re-arm only after the condition clears (no repeat spam while it persists).
+- Arming: with ``trip_armed=False`` (the ``TripAction.NONE`` alert-only
+  install) the danger alert is the entire behaviour — nothing latches, so the
+  operator is never shown a TRIPPED state that no trip produced and no reset
+  can clear.
 """
 
 from __future__ import annotations
@@ -47,6 +51,9 @@ class ProtectionMonitor:
     start_inhibit_s: float
     alert_debounce_s: float
     trip_debounce_s: float
+    #: False for TripAction.NONE. A disarmed monitor still alerts, but never
+    #: latches — a latch with no trip behind it only strands the operator.
+    trip_armed: bool = True
 
     run_started_at: float | None = None
     _was_running: bool = False
@@ -72,6 +79,14 @@ class ProtectionMonitor:
 
     def update(self, state: AlertState, now: float) -> ProtectionActions:
         actions = ProtectionActions()
+
+        # Self-heal a latch left behind by a site that has since disarmed the
+        # trip: the reset control is hidden in that mode, so nothing else could.
+        # Only the latch is dropped — clearing the debounce timers here would
+        # re-alert on a condition that has been continuously present.
+        if not self.trip_armed and self.tripped:
+            self.tripped = False
+            self.trip_reason = ""
 
         if state not in (AlertState.MARGINAL, AlertState.DANGER):
             # Condition cleared (or pump stopped): re-arm alerts. The trip
@@ -105,7 +120,8 @@ class ProtectionMonitor:
                 self._danger_alerted = True
                 actions.send_danger_alert = True
             if (
-                not self.tripped
+                self.trip_armed
+                and not self.tripped
                 and danger_for >= self.trip_debounce_s
             ):
                 self.tripped = True

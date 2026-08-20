@@ -54,10 +54,14 @@ class PumpAnalysisProcessorApp(Application):
 
     def _load_monitor(self) -> ProtectionMonitor:
         """Rebuild the supervisor from persisted state (processor is stateless)."""
+        # Must match the condition app_ui hides the reset button on: an
+        # armed monitor with no way to clear its latch strands the operator.
+        armed = self.config.trip_action.value is not TripAction.NONE
         m = ProtectionMonitor(
             start_inhibit_s=self.config.start_inhibit_seconds.value,
             alert_debounce_s=self.config.alert_debounce_seconds.value,
             trip_debounce_s=self.config.trip_debounce_seconds.value,
+            trip_armed=armed,
         )
         state = self.get_tag("_mon_state") or {}
         m.run_started_at = state.get("run_started_at")
@@ -66,7 +70,7 @@ class PumpAnalysisProcessorApp(Application):
         m._danger_since = state.get("danger_since")
         m._marginal_alerted = state.get("marginal_alerted", False)
         m._danger_alerted = state.get("danger_alerted", False)
-        m.tripped = bool(self.tags.tripped.get())
+        m.tripped = armed and bool(self.tags.tripped.get())
         m.trip_reason = self.tags.trip_reason.get() or ""
         return m
 

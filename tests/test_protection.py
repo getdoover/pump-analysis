@@ -4,9 +4,12 @@ from pump_analysis_common.engine import AlertState
 from pump_analysis_common.protection import ProtectionMonitor
 
 
-def make_monitor() -> ProtectionMonitor:
+def make_monitor(trip_armed: bool = True) -> ProtectionMonitor:
     return ProtectionMonitor(
-        start_inhibit_s=60.0, alert_debounce_s=30.0, trip_debounce_s=10.0
+        start_inhibit_s=60.0,
+        alert_debounce_s=30.0,
+        trip_debounce_s=10.0,
+        trip_armed=trip_armed,
     )
 
 
@@ -86,6 +89,53 @@ class TestTrip:
         m.update(AlertState.MARGINAL, 5.0)  # back to marginal before debounce
         assert not m.update(AlertState.DANGER, 8.0).fire_trip  # timer restarted
         assert not m.tripped
+
+class TestDisarmed:
+    """TripAction.NONE: alert-only. Nothing may latch — the UI hides the reset
+    control in this mode, so a latch would have no way out."""
+
+    def test_danger_alerts_but_never_latches(self):
+        m = make_monitor(trip_armed=False)
+        m.update(AlertState.DANGER, 0.0)
+        actions = m.update(AlertState.DANGER, 10.0)
+        assert actions.send_danger_alert
+        assert not actions.fire_trip
+        assert not m.tripped
+        assert m.trip_reason == ""
+
+    def test_prolonged_danger_alerts_once(self):
+        m = make_monitor(trip_armed=False)
+        m.update(AlertState.DANGER, 0.0)
+        assert m.update(AlertState.DANGER, 10.0).send_danger_alert
+        assert not m.update(AlertState.DANGER, 20.0).send_danger_alert
+        assert not m.update(AlertState.DANGER, 600.0).send_danger_alert
+
+    def test_marginal_alert_still_works(self):
+        m = make_monitor(trip_armed=False)
+        m.update(AlertState.MARGINAL, 0.0)
+        assert m.update(AlertState.MARGINAL, 30.0).send_marginal_alert
+
+    def test_stale_latch_is_cleared(self):
+        """A site that tripped, then disarmed, must not stay stuck TRIPPED."""
+        m = make_monitor(trip_armed=True)
+        m.update(AlertState.DANGER, 0.0)
+        m.update(AlertState.DANGER, 10.0)
+        assert m.tripped
+
+        m.trip_armed = False
+        m.update(AlertState.DANGER, 20.0)
+        assert not m.tripped
+        assert m.trip_reason == ""
+
+    def test_clearing_stale_latch_does_not_re_alert(self):
+        m = make_monitor(trip_armed=True)
+        m.update(AlertState.DANGER, 0.0)
+        m.update(AlertState.DANGER, 10.0)  # danger alert already sent
+
+        m.trip_armed = False
+        # Same unbroken danger condition — no second notification for it.
+        assert not m.update(AlertState.DANGER, 20.0).send_danger_alert
+
 
 def test_config_fault_counts_as_running():
     """A pump turning with an incomplete analysis is still running.

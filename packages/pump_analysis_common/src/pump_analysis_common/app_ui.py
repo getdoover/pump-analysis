@@ -1,6 +1,6 @@
 from pydoover import ui
 
-from .app_config import FLOW_UNIT_INFO, SourceType
+from .app_config import FLOW_UNIT_INFO, SourceType, TripAction
 from .app_tags import PumpAnalysisTags as T
 
 
@@ -40,6 +40,12 @@ class PumpAnalysisUI(ui.UI):
         flow_el.units = label
         # Confidence only means something for calculated flow.
         self._detail("flow_confidence").hidden = not inferred
+
+        # No trip armed, no latch to clear — the monitor never sets `tripped`
+        # for TripAction.NONE, so the reset control would be permanently inert.
+        self._detail("reset_trip").hidden = (
+            cfg.trip_action.value is TripAction.NONE
+        )
 
         # Gauge ranges from the configured curve/BEP, in display units.
         points = cfg.pump_curve.elements or []
@@ -206,7 +212,8 @@ class PumpAnalysisUI(ui.UI):
                 position=5,
             ),
             # Kept deliberately: the trip latches until it is reset from here,
-            # and both applications bind @ui.handler("reset_trip").
+            # and both applications bind @ui.handler("reset_trip"). Hidden by
+            # _apply_config when trip_action is NONE (nothing can latch).
             ui.Button(
                 "Reset Trip",
                 name="reset_trip",

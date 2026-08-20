@@ -54,6 +54,7 @@ class PumpAnalysisDeviceApplication(Application):
             start_inhibit_s=self.config.start_inhibit_seconds.value,
             alert_debounce_s=self.config.alert_debounce_seconds.value,
             trip_debounce_s=self.config.trip_debounce_seconds.value,
+            trip_armed=self.config.trip_action.value is not TripAction.NONE,
         )
         self._trip_do_driven = False
 
