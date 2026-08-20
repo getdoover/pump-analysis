@@ -1,25 +1,32 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4, same version as ../customer-site — this bundle's CSS is injected
+   into the *host* document, so a version skew shows up as broken host rendering
+   (v3's unlayered `--tw-*` defaults outranked the host's @layer utilities and
+   collapsed every transform on the page).
 
-/* shadcn-style design tokens, prefixed and scoped to the widget root so the
-   host page's theme is untouched. Values mirror shadcn/ui neutral. */
-.paw-root {
-  --paw-background: 0 0% 100%;
-  --paw-foreground: 240 10% 3.9%;
-  --paw-card: 0 0% 100%;
-  --paw-card-foreground: 240 10% 3.9%;
-  --paw-muted: 240 4.8% 95.9%;
-  --paw-muted-foreground: 240 3.8% 46.1%;
-  --paw-border: 240 5.9% 90%;
-  --paw-primary: 240 5.9% 10%;
-  --paw-primary-foreground: 0 0% 98%;
-  --paw-destructive: 0 84.2% 60.2%;
-  --paw-warning: 38 92% 50%;
-  --paw-success: 142 71% 45%;
+   Same shape as the analog-rain-gauge widget: we define no colours of our own.
+   `@theme inline` points each utility at the host's shadcn tokens (`--card`,
+   `--muted-foreground`, …), which customer-site declares on `:root` and `.dark`,
+   so the widget follows the host's theme — including dark mode — for free. With
+   `inline` the value is substituted straight into the utility, so nothing of
+   ours is emitted to `:root` and no host token can be clobbered. */
+@import "tailwindcss/preflight" layer(base);
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
 
-  background: hsl(var(--paw-background));
-  color: hsl(var(--paw-foreground));
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  /* customer-site has no `--success`; fall back to its online-connection green. */
+  --color-success: var(--success, var(--doover-connection-online, oklch(0.7097 0.1427 143.89)));
+  --radius-lg: var(--radius, 0.625rem);
+  --radius-xl: calc(var(--radius, 0.625rem) + 4px);
 }

@@ -7,6 +7,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import PumpAnalysisWidget from "../src/PumpAnalysisWidget";
 
+// Stands in for the host page's shadcn tokens; the widget ships none of its own.
+import "./dev-theme.css";
+
 const queryClient = new QueryClient();
 
 const rootEl = document.createElement("div");

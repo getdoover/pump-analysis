@@ -1,0 +1,28 @@
+/* Dev-harness only: stands in for the host page's theme.
+
+   The widget deliberately defines no colours — its utilities resolve against
+   customer-site's shadcn tokens on `:root`/`.dark` (see src/styles.css). Nothing
+   provides those in the standalone harness, so mirror customer-site's light
+   values here. Keep in sync with ../../customer-site/src/styles/global.css. */
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.208 0.042 265.755);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.929 0.013 255.508);
+  --warning: oklch(70.5% 0.213 47.604);
+  --doover-connection-online: oklch(0.7097 0.1427 143.89);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}

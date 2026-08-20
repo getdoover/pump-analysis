@@ -53,6 +53,24 @@ simulators/pump/                # synthetic pump: normal -> cavitating sweep eve
   rule otherwise swallows it, and widget sources silently never get committed.
 - **Inferred flow always ships with `flow_confidence`**; ambiguous curve inversions are capped
   at 0.5. Don't present inferred flow as a measurement.
+- **Widget Tailwind must stay on the same version as `../customer-site`** (v4.1.x today,
+  CSS-first config in `widget/src/styles.css`, no `tailwind.config.js`). The bundle's CSS is
+  injected into the *host* document, so a version skew breaks the host's own render — under
+  v3 the unlayered `--tw-*` defaults outranked the host's `@layer` utilities and collapsed
+  every transform on the page.
+- **Widget utilities go in `layer(utilities)`, never `layer(app)`** — copy
+  `../analog-rain-gauge/widget/src/styles.css`. The host declares
+  `properties, theme, base, doover-admin, components, utilities, app` and keeps its *own*
+  utilities in `app`, the last layer, precisely so an injected widget can never outrank
+  them. Put ours in `app` and our later-injected `.p-2` beats the host's `md:p-6` — the
+  host page's layout breaks, not just the widget's.
+- **The widget defines no colours of its own.** `@theme inline` maps `--color-card` ->
+  `var(--card)` etc., so utilities resolve against customer-site's shadcn tokens on
+  `:root`/`.dark` and the widget follows the host theme (dark mode included) for free.
+  `inline` substitutes the value into the utility, so nothing of ours reaches `:root`.
+  `--success` has no host token — it falls back to `--doover-connection-online`.
+  `widget/dev/dev-theme.css` mirrors customer-site's light values for the standalone
+  `npm run dev` harness; keep it in sync.
 - Widget MF contract: rsbuild `name: "PumpAnalysisWidget"`, expose `./PumpAnalysisWidget` —
   must match `scope`/`module` in `app_ui.py`'s RemoteComponent. Build tooling is
   **rsbuild/rspack**, not webpack.
