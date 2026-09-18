@@ -1706,7 +1706,8 @@
                     }
                 }
             ]
-        }
+        },
+        "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@377ec4c6335304692999f5f47e989e127df1e670/icons/pump_analysis.png"
     },
     "pump_analysis_processor": {
         "name": "pump_analysis_processor",
@@ -3567,6 +3568,7 @@
                     }
                 }
             ]
-        }
+        },
+        "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@377ec4c6335304692999f5f47e989e127df1e670/icons/pump_analysis_processor.png"
     }
 }
