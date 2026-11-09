@@ -330,7 +330,7 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
   }, [installs, lifts, aggregatesByAgent, dark]);
 
   // ---- history: ML pumped per bucket, from each pump's cumulative total
-  const [rangeDays, setRangeDays] = useState(7);
+  const [rangeDays, setRangeDays] = useState(30);
   const top = useMemo(() => Date.now() + 60_000, [rangeDays]);
   const before = useMemo(() => generateSnowflakeIdAtTime(top), [top]);
   const after = useMemo(() => generateSnowflakeIdAtTime(top - rangeDays * DAY_MS), [top, rangeDays]);
