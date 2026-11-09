@@ -130,7 +130,8 @@ async def gather_readings(
         fetch_ai=fetch_ai,
         get_remote=get_remote,
         faults=faults,
-        required=True,
+        # Fixed-speed pumps run off the engaged tag instead.
+        required=cfg.pump_engaged_tag.tag_name._value is NotSet,
     )
 
     water_temp = None

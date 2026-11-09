@@ -461,7 +461,7 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "Engine speed. Usually a tag from the engine controller app (e.g. kensho engine_rpm).",
+                    "description": "Engine speed. Usually a tag from the engine controller app (e.g. kensho engine_rpm). NONE for fixed-speed pumps: set a Pump Engaged tag (running) and a flow source instead.",
                     "default": "tag",
                     "x-position": 18
                 },
@@ -2675,7 +2675,7 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "Engine speed. Usually a tag from the engine controller app (e.g. kensho engine_rpm).",
+                    "description": "Engine speed. Usually a tag from the engine controller app (e.g. kensho engine_rpm). NONE for fixed-speed pumps: set a Pump Engaged tag (running) and a flow source instead.",
                     "default": "tag",
                     "x-position": 18
                 },
@@ -4696,7 +4696,10 @@
                     "x-collapsible": true,
                     "x-defaultCollapsed": false,
                     "x-extraDeviceFields": [
+                        "name",
+                        "display_name",
                         "app_installs__name",
+                        "app_installs__display_name",
                         "app_installs__application_name"
                     ]
                 },

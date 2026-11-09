@@ -41,6 +41,14 @@ def test_disengaged_pump_is_not_running():
     assert r.state is AlertState.NOT_RUNNING
 
 
+def test_fixed_speed_pump_runs_off_engaged_tag_with_measured_flow():
+    p = SiteParams(fixed_head_m=6.0, speed_optional=True)
+    on = analyse(Readings(None, None, engine_rpm=None, flow_measured_m3h=1500, pump_engaged=True), None, p)
+    off = analyse(Readings(None, None, engine_rpm=None, flow_measured_m3h=0, pump_engaged=False), None, p)
+    assert on.state is AlertState.OK and on.flow_m3h == 1500 and on.pump_rpm is None
+    assert off.state is AlertState.NOT_RUNNING
+
+
 def _run(samples, gap_s=1800):
     s = TotaliserState()
     for ts, usage in samples:

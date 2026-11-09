@@ -84,6 +84,9 @@ class SiteParams:
     #: pressure transmitters (sites with speed but no pressures): flow is read
     #: off the curve at this head, and there is no NPSH analysis.
     fixed_head_m: float | None = None
+    #: No speed signal (fixed-speed electric pumps): running comes from the
+    #: engaged tag instead, and flow must be measured (no curve without speed).
+    speed_optional: bool = False
 
 
 @dataclass(frozen=True)
@@ -141,7 +144,10 @@ def analyse(
             readings.engine_rpm, params.speed_ratio, params.speed_offset
         )
 
-    if pump_rpm is None or pump_rpm < params.min_running_rpm:
+    if pump_rpm is None:
+        if not (params.speed_optional and readings.pump_engaged):
+            return Results(state=AlertState.NOT_RUNNING, pump_rpm=pump_rpm)
+    elif pump_rpm < params.min_running_rpm:
         return Results(state=AlertState.NOT_RUNNING, pump_rpm=pump_rpm)
     if readings.pump_engaged is False:
         return Results(state=AlertState.NOT_RUNNING, pump_rpm=pump_rpm)
@@ -196,6 +202,8 @@ def analyse(
         gauge_separation_m=params.gauge_separation_m,
     )
 
+    if pump_rpm is None:
+        curve = None  # a curve needs speed
     if r.flow_source is not FlowSource.MEASURED and curve is not None:
         est = curve.flow_from_measured_head(tdh, pump_rpm)
         if est is not None:
@@ -270,10 +278,10 @@ def analyse(
 
 
 def _pct_of_bep(
-    flow_m3h: float | None, curve: PumpCurve | None, params: SiteParams, pump_rpm: float
+    flow_m3h: float | None, curve: PumpCurve | None, params: SiteParams, pump_rpm: float | None
 ) -> float | None:
     """Flow as % of the BEP flow, affinity-scaled to live speed."""
-    if not params.bep_flow_m3h or flow_m3h is None or curve is None:
+    if not params.bep_flow_m3h or flow_m3h is None or curve is None or pump_rpm is None:
         return None
     bep_live = params.bep_flow_m3h * pump_rpm / curve.reference_rpm
     return flow_m3h / bep_live * 100.0 if bep_live > 0 else None
@@ -283,7 +291,7 @@ def _analyse_fixed_head(
     readings: Readings,
     curve: PumpCurve | None,
     params: SiteParams,
-    pump_rpm: float,
+    pump_rpm: float | None,
     *,
     in_start_inhibit: bool,
 ) -> Results:
@@ -294,6 +302,8 @@ def _analyse_fixed_head(
         r.flow_m3h = readings.flow_measured_m3h
         r.flow_source = FlowSource.MEASURED
         r.flow_confidence = 1.0
+    elif pump_rpm is None:
+        faults.append("no speed and no flow source: nothing to estimate flow from")
     elif curve is None:
         faults.append("no pump curve configured")
     else:

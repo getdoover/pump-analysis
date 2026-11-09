@@ -9,7 +9,13 @@ class PumpFarmOverviewConfig(config.Schema):
     # Pump Analysis). The widget lists every granted device that runs a
     # pump_analysis(_processor) install, keyed by that install's app key.
     extended_permissions = ExtendedPermissionsConfig(
-        extra_fields=["app_installs__name", "app_installs__application_name"]
+        extra_fields=[
+            "name",
+            "display_name",
+            "app_installs__name",
+            "app_installs__display_name",
+            "app_installs__application_name",
+        ]
     )
     title = config.String(
         "Title",

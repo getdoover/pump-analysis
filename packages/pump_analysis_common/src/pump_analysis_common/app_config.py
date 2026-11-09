@@ -365,7 +365,8 @@ class PumpAnalysisConfig(config.Schema):
         "Speed Source Type",
         description=(
             "Engine speed. Usually a tag from the engine controller app "
-            "(e.g. kensho engine_rpm)."
+            "(e.g. kensho engine_rpm). NONE for fixed-speed pumps: set a Pump "
+            "Engaged tag (running) and a flow source instead."
         ),
         choices=SourceType,
         default=SourceType.TAG,
@@ -782,6 +783,10 @@ class PumpAnalysisConfig(config.Schema):
             npsh_danger_margin_m=self.npsh_danger_margin_m.value or 0.5,
             min_npsha_m=self.minimum_npsha_m.value,
             bep_flow_m3h=self.bep_flow_m3h.value,
+            speed_optional=(
+                self.speed_source_type.value is SourceType.NONE
+                and self.pump_engaged_tag.tag_name._value is not config.NotSet
+            ),
             fixed_head_m=(
                 self.fixed_total_head_m.value
                 if self.head_source.value is HeadSource.FIXED
