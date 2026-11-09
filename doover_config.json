@@ -4716,6 +4716,19 @@
                     "default": "Farm Pumps",
                     "x-position": 1
                 },
+                "multi_pump_apps": {
+                    "title": "Multi-Pump Station Apps",
+                    "x-name": "multi_pump_apps",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Comma-separated application names of station apps that publish one set of <slug>_name / _running / _flow (ML/h) / _power_kw / _volume_today / _volume_total tags per pump. Each pump becomes a row.",
+                    "default": "",
+                    "x-position": 2
+                },
                 "dv_app_position": {
                     "title": "Position",
                     "x-name": "dv_app_position",
@@ -4727,7 +4740,7 @@
                     "x-required": false,
                     "description": "Position of Application in UI Structure. Smaller numbers are closer to the top.",
                     "default": 100,
-                    "x-position": 2,
+                    "x-position": 3,
                     "minimum": 0
                 }
             },

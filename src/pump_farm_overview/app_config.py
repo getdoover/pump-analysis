@@ -23,6 +23,16 @@ class PumpFarmOverviewConfig(config.Schema):
         default="Farm Pumps",
         name="title",
     )
+    multi_pump_apps = config.String(
+        "Multi-Pump Station Apps",
+        description=(
+            "Comma-separated application names of station apps that publish one "
+            "set of <slug>_name / _running / _flow (ML/h) / _power_kw / "
+            "_volume_today / _volume_total tags per pump. Each pump becomes a row."
+        ),
+        default="",
+        name="multi_pump_apps",
+    )
     position = config.ApplicationPosition()
 
 

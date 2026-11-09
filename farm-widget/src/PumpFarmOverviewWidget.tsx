@@ -15,6 +15,9 @@ import "./styles.css";
 
 // Apps whose tags this dashboard reads (both publish the same tag set).
 const PUMP_APPS = ["pump_analysis", "pump_analysis_processor"];
+// Multi-motor station apps (configured per install) publish one set of
+// `<slug>_name/_running/_flow/_power_kw/_volume_*` tags per motor; each
+// motor becomes a row, read straight from the station app's own tags.
 // No update for this long and the last state can't be trusted: remote pumps
 // sleep without ever publishing a stop, so their last speed sticks.
 const STALE_MS = 30 * 60_000;
@@ -32,7 +35,7 @@ const SERIES_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#0
 const SERIES_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 
 interface DashConfig {
-  applications?: Record<string, { title?: string | null }>;
+  applications?: Record<string, { title?: string | null; multi_pump_apps?: string | null }>;
 }
 
 type PumpTags = Partial<{
@@ -55,6 +58,8 @@ interface Row {
   key: string;
   deviceId: string;
   appKey: string;
+  /** cumulative-ML tag (under appKey) the history chart diffs */
+  totalTag: string;
   name: string;
   colour: string;
   tags: PumpTags;
@@ -65,15 +70,34 @@ interface Row {
 interface HistoryMessage {
   id?: string | number;
   timestamp?: number | string;
-  data?: Record<string, { volume_total_ml?: number } | undefined>;
+  data?: Record<string, Record<string, unknown> | undefined>;
   channel?: { agent_id?: string | number };
   agent_id?: string | number;
 }
 
-function pumpInstalls(d: DeviceMapEntry): { appKey: string; label: string }[] {
+function installsOf(d: DeviceMapEntry, apps: string[]): { appKey: string; label: string }[] {
   return (d.app_installs ?? [])
-    .filter((i) => PUMP_APPS.includes(i.application_name ?? "") && i.name)
+    .filter((i) => apps.includes(i.application_name ?? "") && i.name)
     .map((i) => ({ appKey: i.name as string, label: i.display_name || (i.name as string) }));
+}
+
+/** One lift-station motor's tags, mapped onto the pump-analysis tag shape. */
+function liftMotorTags(data: Record<string, unknown>, slug: string, now: number): PumpTags {
+  const g = (k: string) => data[`${slug}_${k}`];
+  const running = g("running") === true;
+  const flowMlh = num(g("flow")) ?? 0;
+  const power = num(g("power_kw"));
+  // volume_today counts until the app's next local-midnight rollover.
+  const reset = num(data.daily_reset_time);
+  const todayValid = reset != null && now < reset;
+  return {
+    state: running ? "ok" : "not_running",
+    flow_m3h: running ? flowMlh * 1000 : null,
+    energy_per_ml: running && power != null && flowMlh > 0 ? power / flowMlh : null,
+    volume_today_ml: todayValid ? num(g("volume_today")) ?? 0 : 0,
+    today_date: todayValid ? localToday() : "",
+    volume_total_ml: num(g("volume_total")) ?? undefined,
+  };
 }
 
 function localToday(): string {
@@ -230,14 +254,25 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
 
   const { data: deployment } = useAgentChannel<DashConfig>(agentId, "deployment_config");
   const title = deployment?.applications?.[appKey]?.title?.trim() || "Farm Pumps";
+  const multiPumpApps = useMemo(
+    () => (deployment?.applications?.[appKey]?.multi_pump_apps ?? "").split(",").map((a) => a.trim()).filter(Boolean),
+    [deployment, appKey],
+  );
 
   const { devices, isLoading, hasDeviceMap } = useDeviceMap(agentId, appKey);
   const installs = useMemo(
-    () => devices.flatMap((d) => pumpInstalls(d).map((i) => ({ device: d, ...i }))),
+    () => devices.flatMap((d) => installsOf(d, PUMP_APPS).map((i) => ({ device: d, ...i }))),
     [devices],
   );
-  const deviceIds = useMemo(() => [...new Set(installs.map((i) => i.device.id))], [installs]);
-  const fields = useMemo(() => [...new Set(installs.map((i) => i.appKey))], [installs]);
+  const lifts = useMemo(
+    () => devices.flatMap((d) => installsOf(d, multiPumpApps).map((i) => ({ device: d, ...i }))),
+    [devices, multiPumpApps],
+  );
+  const deviceIds = useMemo(
+    () => [...new Set([...installs, ...lifts].map((i) => i.device.id))],
+    [installs, lifts],
+  );
+  const fields = useMemo(() => [...new Set([...installs, ...lifts].map((i) => i.appKey))], [installs, lifts]);
   const { aggregatesByAgent } = useMultiAgentAggregates<Record<string, PumpTags>>("tag_values", deviceIds, { fields });
 
   const dark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
@@ -245,35 +280,61 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
     const perDevice = new Map<string, number>();
     installs.forEach((i) => perDevice.set(i.device.id, (perDevice.get(i.device.id) ?? 0) + 1));
     const palette = dark ? SERIES_DARK : SERIES_LIGHT;
-    return installs
-      .map(({ device, appKey: key, label }) => {
-        const agg = aggregatesByAgent[device.id];
-        const tags = (agg?.data?.[key] ?? {}) as PumpTags;
-        const raw = agg?.last_updated;
-        const lastUpdated = raw == null ? null : Number(raw) < 1e12 ? Number(raw) * 1000 : Number(raw);
-        const base = device.display_name || device.name || device.id;
-        return {
-          key: `${device.id}:${key}`,
-          deviceId: device.id,
-          appKey: key,
-          name: (perDevice.get(device.id) ?? 0) > 1 ? `${base} — ${label}` : base,
-          colour: "",
-          tags,
-          lastUpdated,
-          status: statusOf(tags, lastUpdated),
-        };
-      })
+    const updatedOf = (id: string) => {
+      const raw = aggregatesByAgent[id]?.last_updated;
+      return raw == null ? null : Number(raw) < 1e12 ? Number(raw) * 1000 : Number(raw);
+    };
+    const pumpRows: Row[] = installs.map(({ device, appKey: key, label }) => {
+      const tags = (aggregatesByAgent[device.id]?.data?.[key] ?? {}) as PumpTags;
+      const lastUpdated = updatedOf(device.id);
+      const base = device.display_name || device.name || device.id;
+      return {
+        key: `${device.id}:${key}`,
+        deviceId: device.id,
+        appKey: key,
+        totalTag: "volume_total_ml",
+        name: (perDevice.get(device.id) ?? 0) > 1 ? `${base} — ${label}` : base,
+        colour: "",
+        tags,
+        lastUpdated,
+        status: statusOf(tags, lastUpdated),
+      };
+    });
+    const now = Date.now();
+    const liftRows: Row[] = lifts.flatMap(({ device, appKey: key }) => {
+      const data = (aggregatesByAgent[device.id]?.data?.[key] ?? {}) as Record<string, unknown>;
+      const lastUpdated = updatedOf(device.id);
+      const base = device.display_name || device.name || device.id;
+      return Object.keys(data)
+        .filter((k) => k.endsWith("_name") && typeof data[k] === "string")
+        .map((k) => {
+          const slug = k.slice(0, -"_name".length);
+          const tags = liftMotorTags(data, slug, now);
+          return {
+            key: `${device.id}:${key}:${slug}`,
+            deviceId: device.id,
+            appKey: key,
+            totalTag: `${slug}_volume_total`,
+            name: `${base} — ${data[k] as string}`,
+            colour: "",
+            tags,
+            lastUpdated,
+            status: statusOf(tags, lastUpdated),
+          };
+        });
+    });
+    return [...pumpRows, ...liftRows]
       // Colour follows the pump (sorted by name), not its rank on any metric.
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((r, i) => ({ ...r, colour: palette[i % palette.length] }));
-  }, [installs, aggregatesByAgent, dark]);
+  }, [installs, lifts, aggregatesByAgent, dark]);
 
   // ---- history: ML pumped per bucket, from each pump's cumulative total
   const [rangeDays, setRangeDays] = useState(7);
   const top = useMemo(() => Date.now() + 60_000, [rangeDays]);
   const before = useMemo(() => generateSnowflakeIdAtTime(top), [top]);
   const after = useMemo(() => generateSnowflakeIdAtTime(top - rangeDays * DAY_MS), [top, rangeDays]);
-  const historyFields = useMemo(() => fields.map((k) => `${k}.volume_total_ml`), [fields]);
+  const historyFields = useMemo(() => [...new Set(rows.map((r) => `${r.appKey}.${r.totalTag}`))], [rows]);
   const maxPages = Math.ceil((rangeDays * DAY_MS) / WEEK_MS) * 4;
   const history = useMultiAgentChannelMessages<HistoryMessage["data"]>("tag_values", deviceIds, {
     initialBefore: before,
@@ -301,15 +362,17 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
     // A day bucket isn't exactly 24 h across DST; index by start time.
     const index = new Map(out.map((b, i) => [b.start, i]));
     const series = new Map<string, { t: number; v: number }[]>();
+    const rowsByAgent = new Map<string, Row[]>();
+    rows.forEach((r) => rowsByAgent.set(r.deviceId, [...(rowsByAgent.get(r.deviceId) ?? []), r]));
     for (const m of history.messages as HistoryMessage[]) {
       const agent = String(m.channel?.agent_id ?? m.agent_id ?? "");
       const t = msgTime(m);
       if (!agent || t == null) continue;
-      for (const [key, tags] of Object.entries(m.data ?? {})) {
-        const v = num(tags?.volume_total_ml);
+      for (const r of rowsByAgent.get(agent) ?? []) {
+        const tags = m.data?.[r.appKey] as Record<string, unknown> | undefined;
+        const v = num(tags?.[r.totalTag]);
         if (v == null) continue;
-        const k = `${agent}:${key}`;
-        (series.get(k) ?? series.set(k, []).get(k)!).push({ t, v });
+        (series.get(r.key) ?? series.set(r.key, []).get(r.key)!).push({ t, v });
       }
     }
     for (const [k, pts] of series) {
@@ -324,7 +387,7 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
       }
     }
     return out;
-  }, [history.messages, top, rangeDays, hourly]);
+  }, [history.messages, rows, top, rangeDays, hourly]);
   const rangeTotal = buckets.reduce((s, b) => s + b.total, 0);
 
   const totals = useMemo(() => {
@@ -344,6 +407,13 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
       if (num(r.tags.fuel_per_ml_today) != null) { fuelL += num(r.tags.fuel_today_l) ?? 0; fuelVol += v; }
       if (num(r.tags.energy_per_ml_today) != null) { kwh += num(r.tags.energy_today_kwh) ?? 0; kwhVol += v; }
     }
+    for (const { device, appKey: key } of lifts) {
+      const data = (aggregatesByAgent[device.id]?.data?.[key] ?? {}) as Record<string, unknown>;
+      const reset = num(data.daily_reset_time);
+      if (reset == null || Date.now() >= reset) continue;
+      const e = num(data.energy_today_kwh) ?? 0, v = num(data.volume_today) ?? 0;
+      if (v > 0) { kwh += e; kwhVol += v; }
+    }
     return {
       flowMlDay: (flow * 24) / 1000,
       vol,
@@ -352,7 +422,7 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
       fuelPerMl: fuelVol > 0 ? fuelL / fuelVol : null,
       kwhPerMl: kwhVol > 0 ? kwh / kwhVol : null,
     };
-  }, [rows]);
+  }, [rows, lifts, aggregatesByAgent]);
 
   if (!isLoading && !hasDeviceMap) {
     return <p className="p-4 text-sm text-muted-foreground">Grant this dashboard access to the pump devices in its Devices (extended permissions) config.</p>;
