@@ -377,9 +377,13 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
     }
     for (const [k, pts] of series) {
       pts.sort((a, b) => a.t - b.t);
+      // Diff against the running high-water mark, not the previous point, so
+      // a total that dips (a bad 0, a restart) and recovers isn't counted twice.
+      let high = pts[0]?.v ?? 0;
       for (let i = 1; i < pts.length; i++) {
-        const d = pts[i].v - pts[i - 1].v;
-        if (d <= 0) continue; // flat, or a reset
+        const d = pts[i].v - high;
+        if (d <= 0) continue;
+        high = pts[i].v;
         const bi = index.get(startOf(pts[i].t));
         if (bi == null) continue;
         out[bi].values[k] = (out[bi].values[k] ?? 0) + d;
