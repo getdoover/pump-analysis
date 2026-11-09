@@ -14,11 +14,16 @@ from pydoover import ui
 from pydoover.models import MessageCreateEvent, NotificationSeverity
 from pydoover.processor import Application
 
-from pump_analysis_common.app_config import SourceType, TripAction
+from pump_analysis_common.app_config import HeadSource, SourceType, TripAction
 from pump_analysis_common.engine import analyse
 from pump_analysis_common.protection import ProtectionMonitor, RUNNING_STATES
-from pump_analysis_common.publish import publish_results
-from pump_analysis_common.sources import gather_readings
+from pump_analysis_common.publish import (
+    TOTALISER_STATE_TAG,
+    publish_results,
+    publish_usage,
+)
+from pump_analysis_common.sources import gather_readings, gather_usage
+from pump_analysis_common.totaliser import TotaliserState, local_date, step
 
 from .app_config import PumpAnalysisProcessorConfig
 from pump_analysis_common.app_tags import PumpAnalysisTags
@@ -35,6 +40,10 @@ REMOTE_TAGS = {
     "flow_input": "raw_flow",
     "speed_input": "raw_speed",
     "water_temp_input": "raw_water_temp",
+    "engaged_input": "raw_engaged",
+    "engine_hours_input": "raw_engine_hours",
+    "fuel_rate_input": "raw_fuel_rate",
+    "power_input": "raw_power",
 }
 
 # Monitor timing state must survive between invocations — persisted as tags.
@@ -97,12 +106,16 @@ class PumpAnalysisProcessorApp(Application):
         now = time.time()
 
         config_faults = []
-        for label, source in (
-            ("suction", self.config.suction_source_type.value),
-            ("discharge", self.config.discharge_source_type.value),
+        sources = [
             ("flow", self.config.flow_source_type.value),
             ("speed", self.config.speed_source_type.value),
-        ):
+        ]
+        if self.config.head_source.value is not HeadSource.FIXED:
+            sources += [
+                ("suction", self.config.suction_source_type.value),
+                ("discharge", self.config.discharge_source_type.value),
+            ]
+        for label, source in sources:
             if source is SourceType.ANALOGUE_IN:
                 config_faults.append(
                     f"{label}: ANALOGUE_IN source is device-app-only — use a tag source"
@@ -160,6 +173,20 @@ class PumpAnalysisProcessorApp(Application):
             pressure_display_factor=pressure_factor,
         )
         await self._save_monitor(monitor)
+        await self._update_totals(results.flow_m3h, now)
+
+    async def _update_totals(self, flow_m3h, now: float):
+        usage = gather_usage(self.config, flow_m3h, self._get_remote)
+        state = TotaliserState.from_dict(self.get_tag(TOTALISER_STATE_TAG))
+        state = step(
+            state,
+            usage,
+            now_ts=now,
+            local_date=local_date(self.config.timezone.value, now),
+            max_gap_s=self.config.max_integration_gap_minutes.value * 60.0,
+        )
+        await publish_usage(self.tags, usage, state)
+        await self.set_tag(TOTALISER_STATE_TAG, state.to_dict())
 
     async def _execute_trip(self, pump: str, margin: float | None):
         action = self.config.trip_action.value

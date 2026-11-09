@@ -188,3 +188,8 @@ widget/assets/*.js
 packages_export/
 requirements.txt
 package.zip
+# Farm overview widget (same layout as widget/)
+farm-widget/node_modules/
+farm-widget/dist/
+farm-widget/@mf-types/
+farm-widget/assets/*.js

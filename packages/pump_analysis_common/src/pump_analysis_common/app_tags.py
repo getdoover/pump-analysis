@@ -38,6 +38,22 @@ class PumpAnalysisTags(tags.Tags):
         republish_locally=False,
     )
 
+    raw_engaged = tags.RemoteTag(
+        "boolean", reference_name="engaged_input", optional=True, republish_locally=False
+    )
+    raw_engine_hours = tags.RemoteTag(
+        "number",
+        reference_name="engine_hours_input",
+        optional=True,
+        republish_locally=False,
+    )
+    raw_fuel_rate = tags.RemoteTag(
+        "number", reference_name="fuel_rate_input", optional=True, republish_locally=False
+    )
+    raw_power = tags.RemoteTag(
+        "number", reference_name="power_input", optional=True, republish_locally=False
+    )
+
     # ---- computed results (UI + widget read these)
     suction_bar = tags.Number(default=None)
     discharge_bar = tags.Number(default=None)
@@ -62,6 +78,25 @@ class PumpAnalysisTags(tags.Tags):
     )
     curve_deviation_pct = tags.Number(default=None)
     pct_of_bep = tags.Number(default=None)
+
+    # ---- usage (farm overview reads these). Volumes in ML. "today" rolls over
+    #      at local midnight. *_per_ml = what it takes to pump one ML: "now" at
+    #      the current operating point, "today" averaged over today's pumping.
+    fuel_rate_lph = tags.Number(default=None)
+    power_kw = tags.Number(default=None)
+    fuel_per_ml = tags.Number(default=None, live=True)
+    energy_per_ml = tags.Number(default=None, live=True)
+    volume_today_ml = tags.Number(default=0.0)
+    run_hours_today = tags.Number(default=0.0)
+    fuel_today_l = tags.Number(default=0.0)
+    energy_today_kwh = tags.Number(default=0.0)
+    fuel_per_ml_today = tags.Number(default=None)
+    energy_per_ml_today = tags.Number(default=None)
+    today_date = tags.String(default="")
+    volume_total_ml = tags.Number(default=0.0)
+    run_hours_total = tags.Number(default=0.0)
+    fuel_total_l = tags.Number(default=0.0)
+    energy_total_kwh = tags.Number(default=0.0)
 
     # ---- state
     state = tags.String(default="not_running", log_on=tags.AnyChange())

@@ -136,3 +136,10 @@ def test_build_curve_from_loaded_config():
     assert curve.reference_rpm == 1800
     assert len(curve.points) == 3
     assert curve.points[1].npshr_m is None
+
+
+def test_import_farm_overview_app():
+    from pump_farm_overview.application import PumpFarmOverviewApp
+
+    assert PumpFarmOverviewApp.config_cls is not None
+    assert PumpFarmOverviewApp.ui_cls is not None

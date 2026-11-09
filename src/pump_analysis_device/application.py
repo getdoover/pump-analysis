@@ -9,8 +9,13 @@ from pydoover.models import NotificationSeverity
 from pump_analysis_common.app_config import TripAction
 from pump_analysis_common.engine import analyse
 from pump_analysis_common.protection import ProtectionMonitor, RUNNING_STATES
-from pump_analysis_common.publish import publish_results
-from pump_analysis_common.sources import gather_readings
+from pump_analysis_common.publish import (
+    TOTALISER_STATE_TAG,
+    publish_results,
+    publish_usage,
+)
+from pump_analysis_common.sources import gather_readings, gather_usage
+from pump_analysis_common.totaliser import TotaliserState, local_date, step
 
 from .app_config import PumpAnalysisDeviceConfig
 from pump_analysis_common.app_tags import PumpAnalysisTags
@@ -28,6 +33,10 @@ REMOTE_TAGS = {
     "flow_input": "raw_flow",
     "speed_input": "raw_speed",
     "water_temp_input": "raw_water_temp",
+    "engaged_input": "raw_engaged",
+    "engine_hours_input": "raw_engine_hours",
+    "fuel_rate_input": "raw_fuel_rate",
+    "power_input": "raw_power",
 }
 
 
@@ -57,6 +66,8 @@ class PumpAnalysisDeviceApplication(Application):
             trip_armed=self.config.trip_action.value is not TripAction.NONE,
         )
         self._trip_do_driven = False
+        self.totals = TotaliserState.from_dict(self.get_tag(TOTALISER_STATE_TAG))
+        self._totals_saved_at = 0.0
 
     def _get_remote(self, reference_name: str):
         return getattr(self.tags, REMOTE_TAGS[reference_name]).get()
@@ -108,6 +119,23 @@ class PumpAnalysisDeviceApplication(Application):
             flow_display_factor=flow_factor,
             pressure_display_factor=pressure_factor,
         )
+        await self._update_totals(results.flow_m3h)
+
+    async def _update_totals(self, flow_m3h):
+        now = time.time()
+        usage = gather_usage(self.config, flow_m3h, self._get_remote)
+        self.totals = step(
+            self.totals,
+            usage,
+            now_ts=now,
+            local_date=local_date(self.config.timezone.value, now),
+            max_gap_s=self.config.max_integration_gap_minutes.value * 60.0,
+        )
+        await publish_usage(self.tags, usage, self.totals)
+        # Survives a restart; once a minute is plenty for a running total.
+        if now - self._totals_saved_at >= 60.0:
+            await self.set_tag(TOTALISER_STATE_TAG, self.totals.to_dict())
+            self._totals_saved_at = now
 
     async def _execute_trip(self, pump: str, margin: float | None):
         action = self.config.trip_action.value

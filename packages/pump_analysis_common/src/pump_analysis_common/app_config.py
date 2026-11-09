@@ -73,6 +73,11 @@ PRESSURE_UNIT_INFO: dict[PressureUnits, tuple[str, float]] = {
 }
 
 
+class HeadSource(enum.Enum):
+    MEASURED = "measured"  # suction + discharge pressure transmitters
+    FIXED = "fixed"  # an assumed total head, for sites without pressures
+
+
 class TripAction(enum.Enum):
     NONE = "none"  # alert only — the commissioning default
     SET_TAG = "set_tag"  # write a value to another app's tag (e.g. Kensho stop)
@@ -91,6 +96,7 @@ FLOW_FROM_AI = config.equal("flow_source_type", SourceType.ANALOGUE_IN)
 FLOW_FROM_TAG = config.equal("flow_source_type", SourceType.TAG)
 SPEED_FROM_AI = config.equal("speed_source_type", SourceType.ANALOGUE_IN)
 SPEED_FROM_TAG = config.equal("speed_source_type", SourceType.TAG)
+HEAD_IS_FIXED = config.equal("head_source", HeadSource.FIXED)
 # Trip wiring: one branch per action, so an alert-only install sees neither.
 TRIP_SETS_TAG = config.equal("trip_action", TripAction.SET_TAG)
 TRIP_DRIVES_DO = config.equal("trip_action", TripAction.DIGITAL_OUTPUT)
@@ -206,6 +212,32 @@ class PumpAnalysisConfig(config.Schema):
         description="Name this pump is referred to in the UI and notifications.",
         default="Pump",
         name="pump_name",
+    )
+
+    # --- Head ---
+    head_source = config.Enum(
+        "Head Source",
+        description=(
+            "MEASURED: total head from the suction and discharge pressure sources "
+            "below. FIXED: an assumed total head (static lift + pipe losses) for "
+            "sites with speed but no pressures — flow is read off the curve at "
+            "that head, and there is no cavitation (NPSH) analysis."
+        ),
+        choices=HeadSource,
+        default=HeadSource.MEASURED,
+        name="head_source",
+    )
+    fixed_total_head_m = config.Number(
+        "Fixed Total Head (m)",
+        description=(
+            "Assumed total head the pump works against. Include pipe friction, not "
+            "just the static lift — flow is very sensitive to this on flat curves."
+        ),
+        default=None,
+        minimum=0.1,
+        maximum=500.0,
+        show_if=HEAD_IS_FIXED,
+        name="fixed_total_head_m",
     )
 
     # --- Suction pressure ---
@@ -391,6 +423,70 @@ class PumpAnalysisConfig(config.Schema):
         default=0.0,
         advanced=True,
         name="pump_speed_offset_rpm",
+    )
+
+    pump_engaged_tag = config.TagRef(
+        "Pump Engaged Tag",
+        description=(
+            "Optional boolean tag that is true while the pump is driven (e.g. the "
+            "engine controller's clutch_engaged). While false, the pump counts as "
+            "not running even if the engine is turning — warm-up and idle aren't "
+            "counted as pumping."
+        ),
+        default=None,
+        reference_name__default="engaged_input",
+        reference_name__hidden=True,
+        name="pump_engaged_tag",
+    )
+
+    # --- Usage (fuel / energy per ML pumped) ---
+    engine_hours_tag = ScaledTagRef(
+        "Engine Hours Tag",
+        description=(
+            "Optional engine hour meter (hours). Strongly recommended: volume and "
+            "fuel are integrated over hour-meter increments, which stay correct "
+            "when a device sleeps or its last speed reading goes stale. Without "
+            "it, wall-clock time between updates is used."
+        ),
+        default=None,
+        reference_name__default="engine_hours_input",
+        reference_name__hidden=True,
+        name="engine_hours_tag",
+    )
+    fuel_rate_tag = ScaledTagRef(
+        "Fuel Rate Tag",
+        description="Optional fuel consumption tag. Scale/offset must yield litres per hour.",
+        default=None,
+        reference_name__default="fuel_rate_input",
+        reference_name__hidden=True,
+        name="fuel_rate_tag",
+    )
+    power_tag = ScaledTagRef(
+        "Power Tag",
+        description="Optional electrical power tag (electric pumps). Scale/offset must yield kW.",
+        default=None,
+        reference_name__default="power_input",
+        reference_name__hidden=True,
+        name="power_tag",
+    )
+    timezone = config.String(
+        "Timezone",
+        description="IANA timezone the 'today' totals roll over in, e.g. Australia/Brisbane.",
+        default="Australia/Brisbane",
+        name="timezone",
+    )
+    max_integration_gap_minutes = config.Number(
+        "Max Integration Gap (Minutes)",
+        description=(
+            "Without an engine hours tag, a gap between updates longer than this "
+            "is only counted up to this long. (Hour-meter increments are always "
+            "counted — the meter only moves while the engine runs.)"
+        ),
+        default=30.0,
+        minimum=1.0,
+        maximum=1440.0,
+        advanced=True,
+        name="max_integration_gap_minutes",
     )
 
     # --- Water temperature ---
@@ -686,6 +782,11 @@ class PumpAnalysisConfig(config.Schema):
             npsh_danger_margin_m=self.npsh_danger_margin_m.value or 0.5,
             min_npsha_m=self.minimum_npsha_m.value,
             bep_flow_m3h=self.bep_flow_m3h.value,
+            fixed_head_m=(
+                self.fixed_total_head_m.value
+                if self.head_source.value is HeadSource.FIXED
+                else None
+            ),
         )
 
     def build_curve(self) -> PumpCurve | None:

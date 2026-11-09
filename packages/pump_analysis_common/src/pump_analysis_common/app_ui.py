@@ -1,6 +1,6 @@
 from pydoover import ui
 
-from .app_config import FLOW_UNIT_INFO, SourceType, TripAction
+from .app_config import FLOW_UNIT_INFO, HeadSource, SourceType, TripAction
 from .app_tags import PumpAnalysisTags as T
 
 
@@ -62,6 +62,19 @@ class PumpAnalysisUI(ui.UI):
                 ]
             else:
                 flow_el.ranges = [ui.Range("Range", 0, round(max_flow, 3), ui.Colour.blue)]
+
+        # Fixed head: no pressures, so no pressure or NPSH readouts.
+        fixed = cfg.head_source.value is HeadSource.FIXED
+        if fixed:
+            self._elements["tdh"].display_name = "Total Head (assumed)"
+        for name in ("npsh_margin", "inlet_pressure", "discharge_pressure"):
+            self._detail(name).hidden = fixed
+
+        # Per-ML readouts only for the usage source this pump actually has.
+        for name in ("fuel_per_ml", "fuel_per_ml_today"):
+            self._elements[name].hidden = not cfg.fuel_rate_tag.configured
+        for name in ("energy_per_ml", "energy_per_ml_today"):
+            self._elements[name].hidden = not cfg.power_tag.configured
 
         # Margin ranges follow the configured thresholds.
         warn = cfg.npsh_warning_margin_m.value
@@ -133,6 +146,47 @@ class PumpAnalysisUI(ui.UI):
     )
     tdh = ui.NumericVariable(
         "Total Head", value=T.tdh_m, name="tdh", units="m", precision=1, position=2
+    )
+
+    pumped_today = ui.NumericVariable(
+        "Pumped Today",
+        value=T.volume_today_ml,
+        name="pumped_today",
+        units="ML",
+        precision=2,
+        position=4,
+    )
+    fuel_per_ml = ui.NumericVariable(
+        "Fuel per ML (now)",
+        value=T.fuel_per_ml,
+        name="fuel_per_ml",
+        units="L/ML",
+        precision=1,
+        position=5,
+    )
+    fuel_per_ml_today = ui.NumericVariable(
+        "Fuel per ML (today)",
+        value=T.fuel_per_ml_today,
+        name="fuel_per_ml_today",
+        units="L/ML",
+        precision=1,
+        position=6,
+    )
+    energy_per_ml = ui.NumericVariable(
+        "Energy per ML (now)",
+        value=T.energy_per_ml,
+        name="energy_per_ml",
+        units="kWh/ML",
+        precision=1,
+        position=7,
+    )
+    energy_per_ml_today = ui.NumericVariable(
+        "Energy per ML (today)",
+        value=T.energy_per_ml_today,
+        name="energy_per_ml_today",
+        units="kWh/ML",
+        precision=1,
+        position=8,
     )
 
     # Custom XY pump-curve widget (Module Federation remote; see widget/).

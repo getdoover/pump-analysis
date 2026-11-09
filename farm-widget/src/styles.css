@@ -1,0 +1,32 @@
+/* Tailwind v4, same version as ../customer-site — this bundle's CSS is injected
+   into the *host* document, so a version skew shows up as broken host rendering
+   (v3's unlayered `--tw-*` defaults outranked the host's @layer utilities and
+   collapsed every transform on the page).
+
+   Same shape as the analog-rain-gauge widget: we define no colours of our own.
+   `@theme inline` points each utility at the host's shadcn tokens (`--card`,
+   `--muted-foreground`, …), which customer-site declares on `:root` and `.dark`,
+   so the widget follows the host's theme — including dark mode — for free. With
+   `inline` the value is substituted straight into the utility, so nothing of
+   ours is emitted to `:root` and no host token can be clobbered. */
+@import "tailwindcss/preflight" layer(base);
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  /* customer-site has no `--success`; fall back to its online-connection green. */
+  --color-success: var(--success, var(--doover-connection-online, oklch(0.7097 0.1427 143.89)));
+  --radius-lg: var(--radius, 0.625rem);
+  --radius-xl: calc(var(--radius, 0.625rem) + 4px);
+}

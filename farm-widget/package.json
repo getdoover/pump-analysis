@@ -1,0 +1,34 @@
+{
+  "name": "pump-farm-overview-widget",
+  "version": "0.1.0",
+  "description": "Farm overview remote component for the Doover pump-analysis apps: every pump's flow, volume pumped and running cost.",
+  "private": true,
+  "scripts": {
+    "build": "rsbuild build",
+    "watch": "rsbuild build --watch --mode development",
+    "typecheck": "tsc --noEmit"
+  },
+  "author": "Span Engineering",
+  "license": "ISC",
+  "dependencies": {
+    "@module-federation/enhanced": "^0.21.6",
+    "@module-federation/rsbuild-plugin": "^0.21.6",
+    "@rsbuild/core": "^1.6.14",
+    "@rsbuild/plugin-react": "^1.4.2",
+    "@rspack/cli": "^1.6.7",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@tanstack/react-query": "~5.90.2",
+    "doover-js": "^0.14.1",
+    "postcss": "^8.5.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router": "^7.7.0",
+    "tailwindcss": "^4.1.18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "typescript": "^5.6.0"
+  }
+}

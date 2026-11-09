@@ -80,6 +80,10 @@ class SiteParams:
     min_npsha_m: float | None = 1.5
     #: best-efficiency-point flow at curve reference speed (manufacturer)
     bep_flow_m3h: float | None = None
+    #: Assumed total head, m. When set, head comes from here instead of the
+    #: pressure transmitters (sites with speed but no pressures): flow is read
+    #: off the curve at this head, and there is no NPSH analysis.
+    fixed_head_m: float | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +95,9 @@ class Readings:
     engine_rpm: float | None
     flow_measured_m3h: float | None = None
     water_temp_c: float | None = None
+    #: Drive engaged (e.g. clutch). False means the engine may be turning but
+    #: the pump is not; None means unknown and speed alone decides.
+    pump_engaged: bool | None = None
 
 
 @dataclass
@@ -136,6 +143,13 @@ def analyse(
 
     if pump_rpm is None or pump_rpm < params.min_running_rpm:
         return Results(state=AlertState.NOT_RUNNING, pump_rpm=pump_rpm)
+    if readings.pump_engaged is False:
+        return Results(state=AlertState.NOT_RUNNING, pump_rpm=pump_rpm)
+
+    if params.fixed_head_m is not None:
+        return _analyse_fixed_head(
+            readings, curve, params, pump_rpm, in_start_inhibit=in_start_inhibit
+        )
 
     # --- pressures: both required for any hydraulic output
     if readings.suction_bar_g is None or readings.discharge_bar_g is None:
@@ -223,11 +237,7 @@ def analyse(
         if predicted and predicted > 0:
             r.curve_deviation_pct = (r.tdh_m - predicted) / predicted * 100.0
 
-    # --- efficiency: % of BEP flow (affinity-scaled to live speed)
-    if params.bep_flow_m3h and r.flow_m3h is not None and curve is not None:
-        bep_live = params.bep_flow_m3h * pump_rpm / curve.reference_rpm
-        if bep_live > 0:
-            r.pct_of_bep = r.flow_m3h / bep_live * 100.0
+    r.pct_of_bep = _pct_of_bep(r.flow_m3h, curve, params, pump_rpm)
 
     # --- state
     r.faults = faults
@@ -256,4 +266,55 @@ def analyse(
     # An incomplete analysis must not read as a healthy one.
     if faults:
         r.state = _escalate(r.state, AlertState.CONFIG_FAULT)
+    return r
+
+
+def _pct_of_bep(
+    flow_m3h: float | None, curve: PumpCurve | None, params: SiteParams, pump_rpm: float
+) -> float | None:
+    """Flow as % of the BEP flow, affinity-scaled to live speed."""
+    if not params.bep_flow_m3h or flow_m3h is None or curve is None:
+        return None
+    bep_live = params.bep_flow_m3h * pump_rpm / curve.reference_rpm
+    return flow_m3h / bep_live * 100.0 if bep_live > 0 else None
+
+
+def _analyse_fixed_head(
+    readings: Readings,
+    curve: PumpCurve | None,
+    params: SiteParams,
+    pump_rpm: float,
+    *,
+    in_start_inhibit: bool,
+) -> Results:
+    """Speed + assumed head -> flow. No pressures, so no NPSH."""
+    r = Results(state=AlertState.OK, pump_rpm=pump_rpm, tdh_m=params.fixed_head_m)
+    faults: list[str] = []
+    if readings.flow_measured_m3h is not None:
+        r.flow_m3h = readings.flow_measured_m3h
+        r.flow_source = FlowSource.MEASURED
+        r.flow_confidence = 1.0
+    elif curve is None:
+        faults.append("no pump curve configured")
+    else:
+        est = curve.flow_from_measured_head(params.fixed_head_m, pump_rpm)
+        shutoff = max(p.head_m for p in curve.points) * (pump_rpm / curve.reference_rpm) ** 2
+        if est is None and params.fixed_head_m > shutoff:
+            # Too slow to lift against this head (e.g. idling): no flow.
+            r.flow_m3h = 0.0
+            r.flow_source = FlowSource.INFERRED
+            r.flow_confidence = 1.0
+        elif est is None:
+            faults.append("operating point off the configured curve")
+        else:
+            r.flow_m3h = est.flow_m3h
+            r.flow_source = FlowSource.INFERRED
+            r.flow_confidence = est.confidence
+            r.flow_ambiguous = est.ambiguous
+    r.pct_of_bep = _pct_of_bep(r.flow_m3h, curve, params, pump_rpm)
+    r.faults = faults
+    if in_start_inhibit:
+        r.state = AlertState.STARTING
+    elif faults:
+        r.state = AlertState.CONFIG_FAULT
     return r

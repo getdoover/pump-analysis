@@ -10,9 +10,12 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable
 
+from pydoover.config import NotSet
+
 from . import pump_math
-from .app_config import PumpAnalysisConfig, ScaledTagRef, SourceType
+from .app_config import HeadSource, PumpAnalysisConfig, ScaledTagRef, SourceType
 from .engine import Readings
+from .totaliser import Usage
 
 FetchAI = Callable[[int], Awaitable[float | None]]
 GetRemote = Callable[[str], float | None]
@@ -73,8 +76,11 @@ async def gather_readings(
     engine reports per cycle.
     """
     faults: list[str] = []
+    fixed_head = cfg.head_source.value is HeadSource.FIXED
+    if fixed_head and cfg.fixed_total_head_m.value is None:
+        faults.append("head source FIXED but no fixed total head set")
 
-    suction = await _resolve(
+    suction = None if fixed_head else await _resolve(
         "suction pressure",
         cfg.suction_source_type.value,
         ai_pin=cfg.suction_ai_pin.value,
@@ -87,7 +93,7 @@ async def gather_readings(
         faults=faults,
         required=True,
     )
-    discharge = await _resolve(
+    discharge = None if fixed_head else await _resolve(
         "discharge pressure",
         cfg.discharge_source_type.value,
         ai_pin=cfg.discharge_ai_pin.value,
@@ -131,6 +137,11 @@ async def gather_readings(
     if get_remote is not None and cfg.water_temperature_tag.configured:
         water_temp = cfg.water_temperature_tag.apply(get_remote("water_temp_input"))
 
+    engaged = None
+    if get_remote is not None and cfg.pump_engaged_tag.tag_name._value is not NotSet:
+        raw = get_remote("engaged_input")
+        engaged = None if raw is None else bool(raw)
+
     return (
         Readings(
             suction_bar_g=suction,
@@ -138,6 +149,25 @@ async def gather_readings(
             engine_rpm=engine_rpm,
             flow_measured_m3h=flow,
             water_temp_c=water_temp,
+            pump_engaged=engaged,
         ),
         faults,
+    )
+
+
+def gather_usage(
+    cfg: PumpAnalysisConfig, flow_m3h: float | None, get_remote: GetRemote | None
+) -> Usage:
+    """Rates for the totaliser. Tag sources only; unconfigured -> None."""
+
+    def tag(ref: ScaledTagRef, reference_name: str) -> float | None:
+        if get_remote is None or not ref.configured:
+            return None
+        return ref.apply(get_remote(reference_name))
+
+    return Usage(
+        flow_m3h=flow_m3h,
+        fuel_lph=tag(cfg.fuel_rate_tag, "fuel_rate_input"),
+        power_kw=tag(cfg.power_tag, "power_input"),
+        engine_hours=tag(cfg.engine_hours_tag, "engine_hours_input"),
     )

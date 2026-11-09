@@ -98,6 +98,68 @@
                     "decPrecision": 1,
                     "live": true
                 },
+                "pumped_today": {
+                    "name": "pumped_today",
+                    "type": "uiVariable",
+                    "displayString": "Pumped Today",
+                    "showActivity": true,
+                    "position": 4,
+                    "hidden": false,
+                    "units": "ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().volume_today_ml:number:0.0",
+                    "decPrecision": 2
+                },
+                "fuel_per_ml": {
+                    "name": "fuel_per_ml",
+                    "type": "uiVariable",
+                    "displayString": "Fuel per ML (now)",
+                    "showActivity": true,
+                    "position": 5,
+                    "hidden": false,
+                    "units": "L/ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().fuel_per_ml:number:null",
+                    "decPrecision": 1,
+                    "live": true
+                },
+                "fuel_per_ml_today": {
+                    "name": "fuel_per_ml_today",
+                    "type": "uiVariable",
+                    "displayString": "Fuel per ML (today)",
+                    "showActivity": true,
+                    "position": 6,
+                    "hidden": false,
+                    "units": "L/ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().fuel_per_ml_today:number:null",
+                    "decPrecision": 1
+                },
+                "energy_per_ml": {
+                    "name": "energy_per_ml",
+                    "type": "uiVariable",
+                    "displayString": "Energy per ML (now)",
+                    "showActivity": true,
+                    "position": 7,
+                    "hidden": false,
+                    "units": "kWh/ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().energy_per_ml:number:null",
+                    "decPrecision": 1,
+                    "live": true
+                },
+                "energy_per_ml_today": {
+                    "name": "energy_per_ml_today",
+                    "type": "uiVariable",
+                    "displayString": "Energy per ML (today)",
+                    "showActivity": true,
+                    "position": 8,
+                    "hidden": false,
+                    "units": "kWh/ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().energy_per_ml_today:number:null",
+                    "decPrecision": 1
+                },
                 "PumpAnalysisWidget": {
                     "name": "PumpAnalysisWidget",
                     "type": "uiRemoteComponent",
@@ -314,6 +376,23 @@
                     "default": "Pump",
                     "x-position": 0
                 },
+                "head_source": {
+                    "enum": [
+                        "measured",
+                        "fixed"
+                    ],
+                    "title": "Head Source",
+                    "x-name": "head_source",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "MEASURED: total head from the suction and discharge pressure sources below. FIXED: an assumed total head (static lift + pipe losses) for sites with speed but no pressures \u2014 flow is read off the curve at that head, and there is no cavitation (NPSH) analysis.",
+                    "default": "measured",
+                    "x-position": 1
+                },
                 "suction_source_type": {
                     "enum": [
                         "none",
@@ -330,7 +409,7 @@
                     "x-required": false,
                     "description": "Where the inlet pressure reading comes from.",
                     "default": "analogue_in",
-                    "x-position": 1
+                    "x-position": 3
                 },
                 "discharge_source_type": {
                     "enum": [
@@ -348,7 +427,7 @@
                     "x-required": false,
                     "description": "Where the discharge pressure reading comes from.",
                     "default": "analogue_in",
-                    "x-position": 6
+                    "x-position": 8
                 },
                 "flow_source_type": {
                     "enum": [
@@ -366,7 +445,7 @@
                     "x-required": false,
                     "description": "With no flow meter, flow is inferred from the pump curve.",
                     "default": "none",
-                    "x-position": 11
+                    "x-position": 13
                 },
                 "speed_source_type": {
                     "enum": [
@@ -384,7 +463,7 @@
                     "x-required": false,
                     "description": "Engine speed. Usually a tag from the engine controller app (e.g. kensho engine_rpm).",
                     "default": "tag",
-                    "x-position": 16
+                    "x-position": 18
                 },
                 "pump_speed_ratio": {
                     "title": "Pump Speed Ratio",
@@ -397,7 +476,7 @@
                     "x-required": false,
                     "description": "pump_rpm = engine_rpm x ratio + offset. 1.0 for direct drive; the gearbox/pulley ratio otherwise. Everything downstream \u2014 the affinity-scaled curve, NPSHr, and Minimum Running Speed \u2014 is in PUMP rpm, so this has to be right before those thresholds mean anything.",
                     "default": 1.0,
-                    "x-position": 21,
+                    "x-position": 23,
                     "minimum": 0.01,
                     "maximum": 20.0
                 },
@@ -412,8 +491,395 @@
                     "x-required": false,
                     "description": "Linear offset of the speed transform. Should be 0 for any rigid drive.",
                     "default": 0.0,
-                    "x-position": 22,
+                    "x-position": 24,
                     "x-advanced": true
+                },
+                "pump_engaged_tag": {
+                    "title": "Pump Engaged Tag",
+                    "x-name": "pump_engaged_tag",
+                    "x-hidden": false,
+                    "format": "doover-tag-reference",
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional boolean tag that is true while the pump is driven (e.g. the engine controller's clutch_engaged). While false, the pump counts as not running even if the engine is turning \u2014 warm-up and idle aren't counted as pumping.",
+                    "default": null,
+                    "x-position": 25,
+                    "properties": {
+                        "reference_name": {
+                            "title": "Reference Name",
+                            "x-name": "reference_name",
+                            "x-hidden": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Local handle for this tag. Match this in your `RemoteTag` declaration.",
+                            "default": "engaged_input",
+                            "x-position": 1
+                        },
+                        "agent_id": {
+                            "title": "Agent",
+                            "x-name": "agent_id",
+                            "x-hidden": false,
+                            "format": "doover-resource-device",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Agent that owns the upstream tag. Leave blank to use this agent.",
+                            "default": null,
+                            "x-position": 2,
+                            "pattern": "\\d+"
+                        },
+                        "app_name": {
+                            "title": "Application",
+                            "x-name": "app_name",
+                            "x-hidden": false,
+                            "format": "doover-application",
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Application that publishes the upstream tag.",
+                            "x-position": 3
+                        },
+                        "tag_name": {
+                            "title": "Tag Name",
+                            "x-name": "tag_name",
+                            "x-hidden": false,
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Name of the upstream tag within the chosen application.",
+                            "x-position": 4
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "app_name",
+                        "tag_name"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false
+                },
+                "engine_hours_tag": {
+                    "title": "Engine Hours Tag",
+                    "x-name": "engine_hours_tag",
+                    "x-hidden": false,
+                    "format": "doover-tag-reference",
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional engine hour meter (hours). Strongly recommended: volume and fuel are integrated over hour-meter increments, which stay correct when a device sleeps or its last speed reading goes stale. Without it, wall-clock time between updates is used.",
+                    "default": null,
+                    "x-position": 26,
+                    "properties": {
+                        "reference_name": {
+                            "title": "Reference Name",
+                            "x-name": "reference_name",
+                            "x-hidden": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Local handle for this tag. Match this in your `RemoteTag` declaration.",
+                            "default": "engine_hours_input",
+                            "x-position": 1
+                        },
+                        "agent_id": {
+                            "title": "Agent",
+                            "x-name": "agent_id",
+                            "x-hidden": false,
+                            "format": "doover-resource-device",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Agent that owns the upstream tag. Leave blank to use this agent.",
+                            "default": null,
+                            "x-position": 2,
+                            "pattern": "\\d+"
+                        },
+                        "app_name": {
+                            "title": "Application",
+                            "x-name": "app_name",
+                            "x-hidden": false,
+                            "format": "doover-application",
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Application that publishes the upstream tag.",
+                            "x-position": 3
+                        },
+                        "tag_name": {
+                            "title": "Tag Name",
+                            "x-name": "tag_name",
+                            "x-hidden": false,
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Name of the upstream tag within the chosen application.",
+                            "x-position": 4
+                        },
+                        "scale": {
+                            "title": "Scale",
+                            "x-name": "scale",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Multiplier applied to the raw tag value.",
+                            "default": 1.0,
+                            "x-position": 5
+                        },
+                        "offset": {
+                            "title": "Offset",
+                            "x-name": "offset",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Offset added to the raw tag value after scaling.",
+                            "default": 0.0,
+                            "x-position": 6
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "app_name",
+                        "tag_name"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false
+                },
+                "fuel_rate_tag": {
+                    "title": "Fuel Rate Tag",
+                    "x-name": "fuel_rate_tag",
+                    "x-hidden": false,
+                    "format": "doover-tag-reference",
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional fuel consumption tag. Scale/offset must yield litres per hour.",
+                    "default": null,
+                    "x-position": 27,
+                    "properties": {
+                        "reference_name": {
+                            "title": "Reference Name",
+                            "x-name": "reference_name",
+                            "x-hidden": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Local handle for this tag. Match this in your `RemoteTag` declaration.",
+                            "default": "fuel_rate_input",
+                            "x-position": 1
+                        },
+                        "agent_id": {
+                            "title": "Agent",
+                            "x-name": "agent_id",
+                            "x-hidden": false,
+                            "format": "doover-resource-device",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Agent that owns the upstream tag. Leave blank to use this agent.",
+                            "default": null,
+                            "x-position": 2,
+                            "pattern": "\\d+"
+                        },
+                        "app_name": {
+                            "title": "Application",
+                            "x-name": "app_name",
+                            "x-hidden": false,
+                            "format": "doover-application",
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Application that publishes the upstream tag.",
+                            "x-position": 3
+                        },
+                        "tag_name": {
+                            "title": "Tag Name",
+                            "x-name": "tag_name",
+                            "x-hidden": false,
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Name of the upstream tag within the chosen application.",
+                            "x-position": 4
+                        },
+                        "scale": {
+                            "title": "Scale",
+                            "x-name": "scale",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Multiplier applied to the raw tag value.",
+                            "default": 1.0,
+                            "x-position": 5
+                        },
+                        "offset": {
+                            "title": "Offset",
+                            "x-name": "offset",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Offset added to the raw tag value after scaling.",
+                            "default": 0.0,
+                            "x-position": 6
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "app_name",
+                        "tag_name"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false
+                },
+                "power_tag": {
+                    "title": "Power Tag",
+                    "x-name": "power_tag",
+                    "x-hidden": false,
+                    "format": "doover-tag-reference",
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional electrical power tag (electric pumps). Scale/offset must yield kW.",
+                    "default": null,
+                    "x-position": 28,
+                    "properties": {
+                        "reference_name": {
+                            "title": "Reference Name",
+                            "x-name": "reference_name",
+                            "x-hidden": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Local handle for this tag. Match this in your `RemoteTag` declaration.",
+                            "default": "power_input",
+                            "x-position": 1
+                        },
+                        "agent_id": {
+                            "title": "Agent",
+                            "x-name": "agent_id",
+                            "x-hidden": false,
+                            "format": "doover-resource-device",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Agent that owns the upstream tag. Leave blank to use this agent.",
+                            "default": null,
+                            "x-position": 2,
+                            "pattern": "\\d+"
+                        },
+                        "app_name": {
+                            "title": "Application",
+                            "x-name": "app_name",
+                            "x-hidden": false,
+                            "format": "doover-application",
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Application that publishes the upstream tag.",
+                            "x-position": 3
+                        },
+                        "tag_name": {
+                            "title": "Tag Name",
+                            "x-name": "tag_name",
+                            "x-hidden": false,
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Name of the upstream tag within the chosen application.",
+                            "x-position": 4
+                        },
+                        "scale": {
+                            "title": "Scale",
+                            "x-name": "scale",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Multiplier applied to the raw tag value.",
+                            "default": 1.0,
+                            "x-position": 5
+                        },
+                        "offset": {
+                            "title": "Offset",
+                            "x-name": "offset",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Offset added to the raw tag value after scaling.",
+                            "default": 0.0,
+                            "x-position": 6
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "app_name",
+                        "tag_name"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false
+                },
+                "timezone": {
+                    "title": "Timezone",
+                    "x-name": "timezone",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "IANA timezone the 'today' totals roll over in, e.g. Australia/Brisbane.",
+                    "default": "Australia/Brisbane",
+                    "x-position": 29
+                },
+                "max_integration_gap_minutes": {
+                    "title": "Max Integration Gap (Minutes)",
+                    "x-name": "max_integration_gap_minutes",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Without an engine hours tag, a gap between updates longer than this is only counted up to this long. (Hour-meter increments are always counted \u2014 the meter only moves while the engine runs.)",
+                    "default": 30.0,
+                    "x-position": 30,
+                    "x-advanced": true,
+                    "minimum": 1.0,
+                    "maximum": 1440.0
                 },
                 "water_temperature_tag": {
                     "title": "Water Temperature Tag",
@@ -427,7 +893,7 @@
                     "x-required": false,
                     "description": "Optional tag carrying water temperature (degrees C). Drives vapour pressure in NPSHa.",
                     "default": null,
-                    "x-position": 23,
+                    "x-position": 31,
                     "properties": {
                         "reference_name": {
                             "title": "Reference Name",
@@ -522,7 +988,7 @@
                     "x-required": false,
                     "description": "Used when no temperature tag is configured.",
                     "default": 20.0,
-                    "x-position": 24,
+                    "x-position": 32,
                     "minimum": 0.0,
                     "maximum": 100.0
                 },
@@ -537,7 +1003,7 @@
                     "x-required": false,
                     "description": "Density of the pumped fluid relative to water (1.0 = water, ~1.3 for mine tailwater). Head is derived from a pressure rise, so leaving this at water over-reads head \u2014 and therefore inferred flow \u2014 by roughly the SG itself. Blank = water at the temperature above.",
                     "default": null,
-                    "x-position": 25,
+                    "x-position": 33,
                     "minimum": 0.5,
                     "maximum": 3.0
                 },
@@ -552,7 +1018,7 @@
                     "x-required": false,
                     "description": "Show flow/margin gauges inside the pump-curve widget. Testing aid \u2014 production installs use the native gauge variables instead.",
                     "default": false,
-                    "x-position": 26,
+                    "x-position": 34,
                     "x-advanced": true
                 },
                 "flow_display_units": {
@@ -571,7 +1037,7 @@
                     "x-required": false,
                     "description": "Units flow is displayed in (UI and widget). Internal maths and the curve stay in m\u00b3/h.",
                     "default": "ml_per_day",
-                    "x-position": 27
+                    "x-position": 35
                 },
                 "pressure_display_units": {
                     "enum": [
@@ -590,7 +1056,7 @@
                     "x-required": false,
                     "description": "Units inlet/discharge pressure are displayed in. Metres of head is density-corrected at the default water temperature. Internal maths stays in bar/kPa.",
                     "default": "metres_head",
-                    "x-position": 28
+                    "x-position": 36
                 },
                 "bep_flow_m3h": {
                     "title": "BEP Flow (m\u00b3/h)",
@@ -603,7 +1069,7 @@
                     "x-required": false,
                     "description": "Best-efficiency-point flow at the curve reference speed, from the manufacturer. Enables the efficient-zone shading and % of BEP output.",
                     "default": null,
-                    "x-position": 29,
+                    "x-position": 37,
                     "minimum": 0.0
                 },
                 "pump_curve": {
@@ -613,7 +1079,7 @@
                     "type": "array",
                     "x-required": true,
                     "description": "Manufacturer head-flow(-NPSHr) points at the reference speed. Digitise from the datasheet.",
-                    "x-position": 30,
+                    "x-position": 38,
                     "items": {
                         "title": "Point",
                         "x-name": "point",
@@ -685,7 +1151,7 @@
                     "x-required": false,
                     "description": "Pump speed the curve points were published at.",
                     "default": null,
-                    "x-position": 31,
+                    "x-position": 39,
                     "minimum": 1.0,
                     "maximum": 10000.0
                 },
@@ -700,7 +1166,7 @@
                     "x-required": false,
                     "description": "Metres above sea level; sets barometric pressure for NPSHa. Worth getting right \u2014 every 1000 m costs about 1.1 m of NPSHa.",
                     "default": 0.0,
-                    "x-position": 32,
+                    "x-position": 40,
                     "minimum": -500.0,
                     "maximum": 6000.0
                 },
@@ -715,7 +1181,7 @@
                     "x-required": false,
                     "description": "Discharge gauge height minus suction gauge height.",
                     "default": 0.0,
-                    "x-position": 33
+                    "x-position": 41
                 },
                 "suction_gauge_height_above_impeller_m": {
                     "title": "Suction Gauge Height Above Impeller (m)",
@@ -728,7 +1194,7 @@
                     "x-required": false,
                     "description": "Height of the suction tapping above the impeller eye (negative if below).",
                     "default": 0.0,
-                    "x-position": 34
+                    "x-position": 42
                 },
                 "suction_pipe_id_mm": {
                     "title": "Suction Pipe ID (mm)",
@@ -741,7 +1207,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 35,
+                    "x-position": 43,
                     "x-advanced": true,
                     "minimum": 1.0,
                     "maximum": 5000.0
@@ -757,7 +1223,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 36,
+                    "x-position": 44,
                     "x-advanced": true,
                     "minimum": 1.0,
                     "maximum": 5000.0
@@ -773,7 +1239,7 @@
                     "x-required": false,
                     "description": "Below this PUMP speed the pump is treated as not running and no hydraulic outputs are produced. Remember this is engine rpm through Pump Speed Ratio, not engine rpm itself.",
                     "default": 300.0,
-                    "x-position": 37,
+                    "x-position": 45,
                     "minimum": 0.0,
                     "maximum": 10000.0
                 },
@@ -788,7 +1254,7 @@
                     "x-required": false,
                     "description": "Alerts and trips are suppressed for this long after the pump starts (priming).",
                     "default": 60.0,
-                    "x-position": 38,
+                    "x-position": 46,
                     "minimum": 0.0,
                     "maximum": 3600.0
                 },
@@ -803,7 +1269,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this raises the marginal alert.",
                     "default": 1.5,
-                    "x-position": 39,
+                    "x-position": 47,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -818,7 +1284,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this is the danger/trip condition.",
                     "default": 0.5,
-                    "x-position": 40,
+                    "x-position": 48,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -833,7 +1299,7 @@
                     "x-required": false,
                     "description": "Curve-independent cavitation backstop: NPSHa below this is DANGER whatever the pump's NPSHr is, and within one warning margin above it is MARGINAL. This is what still protects the pump when flow (and therefore NPSHr) can't be inferred \u2014 e.g. the operating point has wandered off the configured curve. 0 disables it.",
                     "default": 1.5,
-                    "x-position": 41,
+                    "x-position": 49,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -848,7 +1314,7 @@
                     "x-required": false,
                     "description": "A condition must persist this long before an alert is sent.",
                     "default": 30.0,
-                    "x-position": 42,
+                    "x-position": 50,
                     "x-advanced": true,
                     "minimum": 0.0,
                     "maximum": 3600.0
@@ -864,7 +1330,7 @@
                     "x-required": false,
                     "description": "DANGER must persist this long before the trip action fires.",
                     "default": 10.0,
-                    "x-position": 43,
+                    "x-position": 51,
                     "x-advanced": true,
                     "minimum": 0.0,
                     "maximum": 3600.0
@@ -885,7 +1351,7 @@
                     "x-required": false,
                     "description": "NONE = alert only (commissioning default). Arm per pump only after thresholds are proven on site.",
                     "default": "none",
-                    "x-position": 44
+                    "x-position": 52
                 }
             },
             "additionalElements": true,
@@ -893,6 +1359,37 @@
                 "pump_curve"
             ],
             "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "head_source": {
+                                "const": "fixed"
+                            }
+                        },
+                        "required": [
+                            "head_source"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "fixed_total_head_m": {
+                                "title": "Fixed Total Head (m)",
+                                "x-name": "fixed_total_head_m",
+                                "x-hidden": false,
+                                "type": [
+                                    "number",
+                                    "null"
+                                ],
+                                "x-required": false,
+                                "description": "Assumed total head the pump works against. Include pipe friction, not just the static lift \u2014 flow is very sensitive to this on flat curves.",
+                                "default": null,
+                                "x-position": 2,
+                                "minimum": 0.1,
+                                "maximum": 500.0
+                            }
+                        }
+                    }
+                },
                 {
                     "if": {
                         "properties": {
@@ -914,7 +1411,7 @@
                                 "x-required": false,
                                 "description": "Device analog-input pin the inlet transmitter is wired to. On a doovit, AI 0-1 are the 0-10 V inputs and AI 2-5 the 4-20 mA loops.",
                                 "default": 2,
-                                "x-position": 2,
+                                "x-position": 4,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -929,7 +1426,7 @@
                                 "x-required": false,
                                 "description": "Transmitter reading at 4 mA.",
                                 "default": -1.0,
-                                "x-position": 3
+                                "x-position": 5
                             },
                             "suction_range_high_bar": {
                                 "title": "Suction Range High (bar)",
@@ -942,7 +1439,7 @@
                                 "x-required": false,
                                 "description": "Transmitter reading at 20 mA.",
                                 "default": 10.0,
-                                "x-position": 4
+                                "x-position": 6
                             }
                         }
                     }
@@ -972,7 +1469,7 @@
                                 "x-required": false,
                                 "description": "Tag carrying suction pressure. Scale/offset must yield bar gauge.",
                                 "default": null,
-                                "x-position": 5,
+                                "x-position": 7,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -1080,7 +1577,7 @@
                                 "x-required": false,
                                 "description": "Device analog-input pin the discharge transmitter is wired to.",
                                 "default": 3,
-                                "x-position": 7,
+                                "x-position": 9,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -1095,7 +1592,7 @@
                                 "x-required": false,
                                 "description": "Transmitter reading at 4 mA.",
                                 "default": -1.0,
-                                "x-position": 8
+                                "x-position": 10
                             },
                             "discharge_range_high_bar": {
                                 "title": "Discharge Range High (bar)",
@@ -1108,7 +1605,7 @@
                                 "x-required": false,
                                 "description": "Transmitter reading at 20 mA.",
                                 "default": 10.0,
-                                "x-position": 9
+                                "x-position": 11
                             }
                         }
                     }
@@ -1138,7 +1635,7 @@
                                 "x-required": false,
                                 "description": "Tag carrying discharge pressure. Scale/offset must yield bar gauge.",
                                 "default": null,
-                                "x-position": 10,
+                                "x-position": 12,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -1249,7 +1746,7 @@
                                 "x-required": false,
                                 "description": "Device analog-input pin the flow meter is wired to.",
                                 "default": 4,
-                                "x-position": 12,
+                                "x-position": 14,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -1264,7 +1761,7 @@
                                 "x-required": false,
                                 "description": "Flow the meter reads at 4 mA.",
                                 "default": 0.0,
-                                "x-position": 13
+                                "x-position": 15
                             },
                             "flow_range_high_m3h": {
                                 "title": "Flow Range High (m\u00b3/h)",
@@ -1277,7 +1774,7 @@
                                 "x-required": false,
                                 "description": "Flow the meter reads at 20 mA.",
                                 "default": 200.0,
-                                "x-position": 14
+                                "x-position": 16
                             }
                         }
                     }
@@ -1307,7 +1804,7 @@
                                 "x-required": false,
                                 "description": "Tag carrying measured flow. Scale/offset must yield m\u00b3/h.",
                                 "default": null,
-                                "x-position": 15,
+                                "x-position": 17,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -1418,7 +1915,7 @@
                                 "x-required": false,
                                 "description": "Device analog-input pin a speed transmitter is wired to.",
                                 "default": 5,
-                                "x-position": 17,
+                                "x-position": 19,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -1433,7 +1930,7 @@
                                 "x-required": false,
                                 "description": "Engine speed the transmitter reads at 4 mA.",
                                 "default": 0.0,
-                                "x-position": 18,
+                                "x-position": 20,
                                 "minimum": 0.0
                             },
                             "speed_range_high_rpm": {
@@ -1447,7 +1944,7 @@
                                 "x-required": false,
                                 "description": "Engine speed the transmitter reads at 20 mA.",
                                 "default": 3000.0,
-                                "x-position": 19,
+                                "x-position": 21,
                                 "minimum": 0.0
                             }
                         }
@@ -1475,7 +1972,7 @@
                                 "x-required": false,
                                 "description": "Tag carrying engine RPM.",
                                 "default": null,
-                                "x-position": 20,
+                                "x-position": 22,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -1587,7 +2084,7 @@
                                 "x-required": false,
                                 "description": "For SET_TAG: the tag to write (e.g. an engine controller stop command).",
                                 "default": null,
-                                "x-position": 45,
+                                "x-position": 53,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -1656,7 +2153,7 @@
                                 "x-required": false,
                                 "description": "Value written to the trip tag. Parsed as JSON where possible (true, 0, \"stop\").",
                                 "default": "true",
-                                "x-position": 46
+                                "x-position": 54
                             }
                         }
                     }
@@ -1685,7 +2182,7 @@
                                 "x-required": false,
                                 "description": "For DIGITAL_OUTPUT: the doovit DO wired to the panel stop input.",
                                 "default": null,
-                                "x-position": 47,
+                                "x-position": 55,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -1700,7 +2197,7 @@
                                 "x-required": false,
                                 "description": "Level driven onto the trip DO when tripping.",
                                 "default": true,
-                                "x-position": 48
+                                "x-position": 56
                             }
                         }
                     }
@@ -1815,6 +2312,68 @@
                     "decPrecision": 1,
                     "live": true
                 },
+                "pumped_today": {
+                    "name": "pumped_today",
+                    "type": "uiVariable",
+                    "displayString": "Pumped Today",
+                    "showActivity": true,
+                    "position": 4,
+                    "hidden": false,
+                    "units": "ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().volume_today_ml:number:0.0",
+                    "decPrecision": 2
+                },
+                "fuel_per_ml": {
+                    "name": "fuel_per_ml",
+                    "type": "uiVariable",
+                    "displayString": "Fuel per ML (now)",
+                    "showActivity": true,
+                    "position": 5,
+                    "hidden": false,
+                    "units": "L/ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().fuel_per_ml:number:null",
+                    "decPrecision": 1,
+                    "live": true
+                },
+                "fuel_per_ml_today": {
+                    "name": "fuel_per_ml_today",
+                    "type": "uiVariable",
+                    "displayString": "Fuel per ML (today)",
+                    "showActivity": true,
+                    "position": 6,
+                    "hidden": false,
+                    "units": "L/ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().fuel_per_ml_today:number:null",
+                    "decPrecision": 1
+                },
+                "energy_per_ml": {
+                    "name": "energy_per_ml",
+                    "type": "uiVariable",
+                    "displayString": "Energy per ML (now)",
+                    "showActivity": true,
+                    "position": 7,
+                    "hidden": false,
+                    "units": "kWh/ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().energy_per_ml:number:null",
+                    "decPrecision": 1,
+                    "live": true
+                },
+                "energy_per_ml_today": {
+                    "name": "energy_per_ml_today",
+                    "type": "uiVariable",
+                    "displayString": "Energy per ML (today)",
+                    "showActivity": true,
+                    "position": 8,
+                    "hidden": false,
+                    "units": "kWh/ML",
+                    "varType": "float",
+                    "currentValue": "$tag.app().energy_per_ml_today:number:null",
+                    "decPrecision": 1
+                },
                 "PumpAnalysisWidget": {
                     "name": "PumpAnalysisWidget",
                     "type": "uiRemoteComponent",
@@ -2031,6 +2590,23 @@
                     "default": "Pump",
                     "x-position": 0
                 },
+                "head_source": {
+                    "enum": [
+                        "measured",
+                        "fixed"
+                    ],
+                    "title": "Head Source",
+                    "x-name": "head_source",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "MEASURED: total head from the suction and discharge pressure sources below. FIXED: an assumed total head (static lift + pipe losses) for sites with speed but no pressures \u2014 flow is read off the curve at that head, and there is no cavitation (NPSH) analysis.",
+                    "default": "measured",
+                    "x-position": 1
+                },
                 "suction_source_type": {
                     "enum": [
                         "none",
@@ -2047,7 +2623,7 @@
                     "x-required": false,
                     "description": "Where the inlet pressure reading comes from.",
                     "default": "analogue_in",
-                    "x-position": 1
+                    "x-position": 3
                 },
                 "discharge_source_type": {
                     "enum": [
@@ -2065,7 +2641,7 @@
                     "x-required": false,
                     "description": "Where the discharge pressure reading comes from.",
                     "default": "analogue_in",
-                    "x-position": 6
+                    "x-position": 8
                 },
                 "flow_source_type": {
                     "enum": [
@@ -2083,7 +2659,7 @@
                     "x-required": false,
                     "description": "With no flow meter, flow is inferred from the pump curve.",
                     "default": "none",
-                    "x-position": 11
+                    "x-position": 13
                 },
                 "speed_source_type": {
                     "enum": [
@@ -2101,7 +2677,7 @@
                     "x-required": false,
                     "description": "Engine speed. Usually a tag from the engine controller app (e.g. kensho engine_rpm).",
                     "default": "tag",
-                    "x-position": 16
+                    "x-position": 18
                 },
                 "pump_speed_ratio": {
                     "title": "Pump Speed Ratio",
@@ -2114,7 +2690,7 @@
                     "x-required": false,
                     "description": "pump_rpm = engine_rpm x ratio + offset. 1.0 for direct drive; the gearbox/pulley ratio otherwise. Everything downstream \u2014 the affinity-scaled curve, NPSHr, and Minimum Running Speed \u2014 is in PUMP rpm, so this has to be right before those thresholds mean anything.",
                     "default": 1.0,
-                    "x-position": 21,
+                    "x-position": 23,
                     "minimum": 0.01,
                     "maximum": 20.0
                 },
@@ -2129,8 +2705,395 @@
                     "x-required": false,
                     "description": "Linear offset of the speed transform. Should be 0 for any rigid drive.",
                     "default": 0.0,
-                    "x-position": 22,
+                    "x-position": 24,
                     "x-advanced": true
+                },
+                "pump_engaged_tag": {
+                    "title": "Pump Engaged Tag",
+                    "x-name": "pump_engaged_tag",
+                    "x-hidden": false,
+                    "format": "doover-tag-reference",
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional boolean tag that is true while the pump is driven (e.g. the engine controller's clutch_engaged). While false, the pump counts as not running even if the engine is turning \u2014 warm-up and idle aren't counted as pumping.",
+                    "default": null,
+                    "x-position": 25,
+                    "properties": {
+                        "reference_name": {
+                            "title": "Reference Name",
+                            "x-name": "reference_name",
+                            "x-hidden": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Local handle for this tag. Match this in your `RemoteTag` declaration.",
+                            "default": "engaged_input",
+                            "x-position": 1
+                        },
+                        "agent_id": {
+                            "title": "Agent",
+                            "x-name": "agent_id",
+                            "x-hidden": false,
+                            "format": "doover-resource-device",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Agent that owns the upstream tag. Leave blank to use this agent.",
+                            "default": null,
+                            "x-position": 2,
+                            "pattern": "\\d+"
+                        },
+                        "app_name": {
+                            "title": "Application",
+                            "x-name": "app_name",
+                            "x-hidden": false,
+                            "format": "doover-application",
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Application that publishes the upstream tag.",
+                            "x-position": 3
+                        },
+                        "tag_name": {
+                            "title": "Tag Name",
+                            "x-name": "tag_name",
+                            "x-hidden": false,
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Name of the upstream tag within the chosen application.",
+                            "x-position": 4
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "app_name",
+                        "tag_name"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false
+                },
+                "engine_hours_tag": {
+                    "title": "Engine Hours Tag",
+                    "x-name": "engine_hours_tag",
+                    "x-hidden": false,
+                    "format": "doover-tag-reference",
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional engine hour meter (hours). Strongly recommended: volume and fuel are integrated over hour-meter increments, which stay correct when a device sleeps or its last speed reading goes stale. Without it, wall-clock time between updates is used.",
+                    "default": null,
+                    "x-position": 26,
+                    "properties": {
+                        "reference_name": {
+                            "title": "Reference Name",
+                            "x-name": "reference_name",
+                            "x-hidden": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Local handle for this tag. Match this in your `RemoteTag` declaration.",
+                            "default": "engine_hours_input",
+                            "x-position": 1
+                        },
+                        "agent_id": {
+                            "title": "Agent",
+                            "x-name": "agent_id",
+                            "x-hidden": false,
+                            "format": "doover-resource-device",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Agent that owns the upstream tag. Leave blank to use this agent.",
+                            "default": null,
+                            "x-position": 2,
+                            "pattern": "\\d+"
+                        },
+                        "app_name": {
+                            "title": "Application",
+                            "x-name": "app_name",
+                            "x-hidden": false,
+                            "format": "doover-application",
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Application that publishes the upstream tag.",
+                            "x-position": 3
+                        },
+                        "tag_name": {
+                            "title": "Tag Name",
+                            "x-name": "tag_name",
+                            "x-hidden": false,
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Name of the upstream tag within the chosen application.",
+                            "x-position": 4
+                        },
+                        "scale": {
+                            "title": "Scale",
+                            "x-name": "scale",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Multiplier applied to the raw tag value.",
+                            "default": 1.0,
+                            "x-position": 5
+                        },
+                        "offset": {
+                            "title": "Offset",
+                            "x-name": "offset",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Offset added to the raw tag value after scaling.",
+                            "default": 0.0,
+                            "x-position": 6
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "app_name",
+                        "tag_name"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false
+                },
+                "fuel_rate_tag": {
+                    "title": "Fuel Rate Tag",
+                    "x-name": "fuel_rate_tag",
+                    "x-hidden": false,
+                    "format": "doover-tag-reference",
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional fuel consumption tag. Scale/offset must yield litres per hour.",
+                    "default": null,
+                    "x-position": 27,
+                    "properties": {
+                        "reference_name": {
+                            "title": "Reference Name",
+                            "x-name": "reference_name",
+                            "x-hidden": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Local handle for this tag. Match this in your `RemoteTag` declaration.",
+                            "default": "fuel_rate_input",
+                            "x-position": 1
+                        },
+                        "agent_id": {
+                            "title": "Agent",
+                            "x-name": "agent_id",
+                            "x-hidden": false,
+                            "format": "doover-resource-device",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Agent that owns the upstream tag. Leave blank to use this agent.",
+                            "default": null,
+                            "x-position": 2,
+                            "pattern": "\\d+"
+                        },
+                        "app_name": {
+                            "title": "Application",
+                            "x-name": "app_name",
+                            "x-hidden": false,
+                            "format": "doover-application",
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Application that publishes the upstream tag.",
+                            "x-position": 3
+                        },
+                        "tag_name": {
+                            "title": "Tag Name",
+                            "x-name": "tag_name",
+                            "x-hidden": false,
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Name of the upstream tag within the chosen application.",
+                            "x-position": 4
+                        },
+                        "scale": {
+                            "title": "Scale",
+                            "x-name": "scale",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Multiplier applied to the raw tag value.",
+                            "default": 1.0,
+                            "x-position": 5
+                        },
+                        "offset": {
+                            "title": "Offset",
+                            "x-name": "offset",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Offset added to the raw tag value after scaling.",
+                            "default": 0.0,
+                            "x-position": 6
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "app_name",
+                        "tag_name"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false
+                },
+                "power_tag": {
+                    "title": "Power Tag",
+                    "x-name": "power_tag",
+                    "x-hidden": false,
+                    "format": "doover-tag-reference",
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Optional electrical power tag (electric pumps). Scale/offset must yield kW.",
+                    "default": null,
+                    "x-position": 28,
+                    "properties": {
+                        "reference_name": {
+                            "title": "Reference Name",
+                            "x-name": "reference_name",
+                            "x-hidden": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Local handle for this tag. Match this in your `RemoteTag` declaration.",
+                            "default": "power_input",
+                            "x-position": 1
+                        },
+                        "agent_id": {
+                            "title": "Agent",
+                            "x-name": "agent_id",
+                            "x-hidden": false,
+                            "format": "doover-resource-device",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Agent that owns the upstream tag. Leave blank to use this agent.",
+                            "default": null,
+                            "x-position": 2,
+                            "pattern": "\\d+"
+                        },
+                        "app_name": {
+                            "title": "Application",
+                            "x-name": "app_name",
+                            "x-hidden": false,
+                            "format": "doover-application",
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Application that publishes the upstream tag.",
+                            "x-position": 3
+                        },
+                        "tag_name": {
+                            "title": "Tag Name",
+                            "x-name": "tag_name",
+                            "x-hidden": false,
+                            "type": "string",
+                            "x-required": true,
+                            "description": "Name of the upstream tag within the chosen application.",
+                            "x-position": 4
+                        },
+                        "scale": {
+                            "title": "Scale",
+                            "x-name": "scale",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Multiplier applied to the raw tag value.",
+                            "default": 1.0,
+                            "x-position": 5
+                        },
+                        "offset": {
+                            "title": "Offset",
+                            "x-name": "offset",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Offset added to the raw tag value after scaling.",
+                            "default": 0.0,
+                            "x-position": 6
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "app_name",
+                        "tag_name"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false
+                },
+                "timezone": {
+                    "title": "Timezone",
+                    "x-name": "timezone",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "IANA timezone the 'today' totals roll over in, e.g. Australia/Brisbane.",
+                    "default": "Australia/Brisbane",
+                    "x-position": 29
+                },
+                "max_integration_gap_minutes": {
+                    "title": "Max Integration Gap (Minutes)",
+                    "x-name": "max_integration_gap_minutes",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Without an engine hours tag, a gap between updates longer than this is only counted up to this long. (Hour-meter increments are always counted \u2014 the meter only moves while the engine runs.)",
+                    "default": 30.0,
+                    "x-position": 30,
+                    "x-advanced": true,
+                    "minimum": 1.0,
+                    "maximum": 1440.0
                 },
                 "water_temperature_tag": {
                     "title": "Water Temperature Tag",
@@ -2144,7 +3107,7 @@
                     "x-required": false,
                     "description": "Optional tag carrying water temperature (degrees C). Drives vapour pressure in NPSHa.",
                     "default": null,
-                    "x-position": 23,
+                    "x-position": 31,
                     "properties": {
                         "reference_name": {
                             "title": "Reference Name",
@@ -2239,7 +3202,7 @@
                     "x-required": false,
                     "description": "Used when no temperature tag is configured.",
                     "default": 20.0,
-                    "x-position": 24,
+                    "x-position": 32,
                     "minimum": 0.0,
                     "maximum": 100.0
                 },
@@ -2254,7 +3217,7 @@
                     "x-required": false,
                     "description": "Density of the pumped fluid relative to water (1.0 = water, ~1.3 for mine tailwater). Head is derived from a pressure rise, so leaving this at water over-reads head \u2014 and therefore inferred flow \u2014 by roughly the SG itself. Blank = water at the temperature above.",
                     "default": null,
-                    "x-position": 25,
+                    "x-position": 33,
                     "minimum": 0.5,
                     "maximum": 3.0
                 },
@@ -2269,7 +3232,7 @@
                     "x-required": false,
                     "description": "Show flow/margin gauges inside the pump-curve widget. Testing aid \u2014 production installs use the native gauge variables instead.",
                     "default": false,
-                    "x-position": 26,
+                    "x-position": 34,
                     "x-advanced": true
                 },
                 "flow_display_units": {
@@ -2288,7 +3251,7 @@
                     "x-required": false,
                     "description": "Units flow is displayed in (UI and widget). Internal maths and the curve stay in m\u00b3/h.",
                     "default": "ml_per_day",
-                    "x-position": 27
+                    "x-position": 35
                 },
                 "pressure_display_units": {
                     "enum": [
@@ -2307,7 +3270,7 @@
                     "x-required": false,
                     "description": "Units inlet/discharge pressure are displayed in. Metres of head is density-corrected at the default water temperature. Internal maths stays in bar/kPa.",
                     "default": "metres_head",
-                    "x-position": 28
+                    "x-position": 36
                 },
                 "bep_flow_m3h": {
                     "title": "BEP Flow (m\u00b3/h)",
@@ -2320,7 +3283,7 @@
                     "x-required": false,
                     "description": "Best-efficiency-point flow at the curve reference speed, from the manufacturer. Enables the efficient-zone shading and % of BEP output.",
                     "default": null,
-                    "x-position": 29,
+                    "x-position": 37,
                     "minimum": 0.0
                 },
                 "pump_curve": {
@@ -2330,7 +3293,7 @@
                     "type": "array",
                     "x-required": true,
                     "description": "Manufacturer head-flow(-NPSHr) points at the reference speed. Digitise from the datasheet.",
-                    "x-position": 30,
+                    "x-position": 38,
                     "items": {
                         "title": "Point",
                         "x-name": "point",
@@ -2402,7 +3365,7 @@
                     "x-required": false,
                     "description": "Pump speed the curve points were published at.",
                     "default": null,
-                    "x-position": 31,
+                    "x-position": 39,
                     "minimum": 1.0,
                     "maximum": 10000.0
                 },
@@ -2417,7 +3380,7 @@
                     "x-required": false,
                     "description": "Metres above sea level; sets barometric pressure for NPSHa. Worth getting right \u2014 every 1000 m costs about 1.1 m of NPSHa.",
                     "default": 0.0,
-                    "x-position": 32,
+                    "x-position": 40,
                     "minimum": -500.0,
                     "maximum": 6000.0
                 },
@@ -2432,7 +3395,7 @@
                     "x-required": false,
                     "description": "Discharge gauge height minus suction gauge height.",
                     "default": 0.0,
-                    "x-position": 33
+                    "x-position": 41
                 },
                 "suction_gauge_height_above_impeller_m": {
                     "title": "Suction Gauge Height Above Impeller (m)",
@@ -2445,7 +3408,7 @@
                     "x-required": false,
                     "description": "Height of the suction tapping above the impeller eye (negative if below).",
                     "default": 0.0,
-                    "x-position": 34
+                    "x-position": 42
                 },
                 "suction_pipe_id_mm": {
                     "title": "Suction Pipe ID (mm)",
@@ -2458,7 +3421,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 35,
+                    "x-position": 43,
                     "x-advanced": true,
                     "minimum": 1.0,
                     "maximum": 5000.0
@@ -2474,7 +3437,7 @@
                     "x-required": false,
                     "description": "Optional; enables velocity-head terms.",
                     "default": null,
-                    "x-position": 36,
+                    "x-position": 44,
                     "x-advanced": true,
                     "minimum": 1.0,
                     "maximum": 5000.0
@@ -2490,7 +3453,7 @@
                     "x-required": false,
                     "description": "Below this PUMP speed the pump is treated as not running and no hydraulic outputs are produced. Remember this is engine rpm through Pump Speed Ratio, not engine rpm itself.",
                     "default": 300.0,
-                    "x-position": 37,
+                    "x-position": 45,
                     "minimum": 0.0,
                     "maximum": 10000.0
                 },
@@ -2505,7 +3468,7 @@
                     "x-required": false,
                     "description": "Alerts and trips are suppressed for this long after the pump starts (priming).",
                     "default": 60.0,
-                    "x-position": 38,
+                    "x-position": 46,
                     "minimum": 0.0,
                     "maximum": 3600.0
                 },
@@ -2520,7 +3483,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this raises the marginal alert.",
                     "default": 1.5,
-                    "x-position": 39,
+                    "x-position": 47,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -2535,7 +3498,7 @@
                     "x-required": false,
                     "description": "NPSHa - NPSHr below this is the danger/trip condition.",
                     "default": 0.5,
-                    "x-position": 40,
+                    "x-position": 48,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -2550,7 +3513,7 @@
                     "x-required": false,
                     "description": "Curve-independent cavitation backstop: NPSHa below this is DANGER whatever the pump's NPSHr is, and within one warning margin above it is MARGINAL. This is what still protects the pump when flow (and therefore NPSHr) can't be inferred \u2014 e.g. the operating point has wandered off the configured curve. 0 disables it.",
                     "default": 1.5,
-                    "x-position": 41,
+                    "x-position": 49,
                     "minimum": 0.0,
                     "maximum": 50.0
                 },
@@ -2565,7 +3528,7 @@
                     "x-required": false,
                     "description": "A condition must persist this long before an alert is sent.",
                     "default": 30.0,
-                    "x-position": 42,
+                    "x-position": 50,
                     "x-advanced": true,
                     "minimum": 0.0,
                     "maximum": 3600.0
@@ -2581,7 +3544,7 @@
                     "x-required": false,
                     "description": "DANGER must persist this long before the trip action fires.",
                     "default": 10.0,
-                    "x-position": 43,
+                    "x-position": 51,
                     "x-advanced": true,
                     "minimum": 0.0,
                     "maximum": 3600.0
@@ -2602,7 +3565,7 @@
                     "x-required": false,
                     "description": "NONE = alert only (commissioning default). Arm per pump only after thresholds are proven on site.",
                     "default": "none",
-                    "x-position": 44
+                    "x-position": 52
                 },
                 "dv_proc_subscriptions": {
                     "title": "Subscription",
@@ -2617,7 +3580,7 @@
                     "default": [
                         "tag_values"
                     ],
-                    "x-position": 49,
+                    "x-position": 57,
                     "items": {
                         "title": "Channel Subscription",
                         "x-name": "dv_proc_subscription",
@@ -2634,7 +3597,7 @@
                     "type": "object",
                     "x-required": true,
                     "description": "Framework-level processor runtime config.",
-                    "x-position": 50,
+                    "x-position": 58,
                     "properties": {
                         "log_level": {
                             "enum": [
@@ -2758,6 +3721,37 @@
                 {
                     "if": {
                         "properties": {
+                            "head_source": {
+                                "const": "fixed"
+                            }
+                        },
+                        "required": [
+                            "head_source"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "fixed_total_head_m": {
+                                "title": "Fixed Total Head (m)",
+                                "x-name": "fixed_total_head_m",
+                                "x-hidden": false,
+                                "type": [
+                                    "number",
+                                    "null"
+                                ],
+                                "x-required": false,
+                                "description": "Assumed total head the pump works against. Include pipe friction, not just the static lift \u2014 flow is very sensitive to this on flat curves.",
+                                "default": null,
+                                "x-position": 2,
+                                "minimum": 0.1,
+                                "maximum": 500.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
                             "suction_source_type": {
                                 "const": "analogue_in"
                             }
@@ -2776,7 +3770,7 @@
                                 "x-required": false,
                                 "description": "Device analog-input pin the inlet transmitter is wired to. On a doovit, AI 0-1 are the 0-10 V inputs and AI 2-5 the 4-20 mA loops.",
                                 "default": 2,
-                                "x-position": 2,
+                                "x-position": 4,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -2791,7 +3785,7 @@
                                 "x-required": false,
                                 "description": "Transmitter reading at 4 mA.",
                                 "default": -1.0,
-                                "x-position": 3
+                                "x-position": 5
                             },
                             "suction_range_high_bar": {
                                 "title": "Suction Range High (bar)",
@@ -2804,7 +3798,7 @@
                                 "x-required": false,
                                 "description": "Transmitter reading at 20 mA.",
                                 "default": 10.0,
-                                "x-position": 4
+                                "x-position": 6
                             }
                         }
                     }
@@ -2834,7 +3828,7 @@
                                 "x-required": false,
                                 "description": "Tag carrying suction pressure. Scale/offset must yield bar gauge.",
                                 "default": null,
-                                "x-position": 5,
+                                "x-position": 7,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -2942,7 +3936,7 @@
                                 "x-required": false,
                                 "description": "Device analog-input pin the discharge transmitter is wired to.",
                                 "default": 3,
-                                "x-position": 7,
+                                "x-position": 9,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -2957,7 +3951,7 @@
                                 "x-required": false,
                                 "description": "Transmitter reading at 4 mA.",
                                 "default": -1.0,
-                                "x-position": 8
+                                "x-position": 10
                             },
                             "discharge_range_high_bar": {
                                 "title": "Discharge Range High (bar)",
@@ -2970,7 +3964,7 @@
                                 "x-required": false,
                                 "description": "Transmitter reading at 20 mA.",
                                 "default": 10.0,
-                                "x-position": 9
+                                "x-position": 11
                             }
                         }
                     }
@@ -3000,7 +3994,7 @@
                                 "x-required": false,
                                 "description": "Tag carrying discharge pressure. Scale/offset must yield bar gauge.",
                                 "default": null,
-                                "x-position": 10,
+                                "x-position": 12,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -3111,7 +4105,7 @@
                                 "x-required": false,
                                 "description": "Device analog-input pin the flow meter is wired to.",
                                 "default": 4,
-                                "x-position": 12,
+                                "x-position": 14,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -3126,7 +4120,7 @@
                                 "x-required": false,
                                 "description": "Flow the meter reads at 4 mA.",
                                 "default": 0.0,
-                                "x-position": 13
+                                "x-position": 15
                             },
                             "flow_range_high_m3h": {
                                 "title": "Flow Range High (m\u00b3/h)",
@@ -3139,7 +4133,7 @@
                                 "x-required": false,
                                 "description": "Flow the meter reads at 20 mA.",
                                 "default": 200.0,
-                                "x-position": 14
+                                "x-position": 16
                             }
                         }
                     }
@@ -3169,7 +4163,7 @@
                                 "x-required": false,
                                 "description": "Tag carrying measured flow. Scale/offset must yield m\u00b3/h.",
                                 "default": null,
-                                "x-position": 15,
+                                "x-position": 17,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -3280,7 +4274,7 @@
                                 "x-required": false,
                                 "description": "Device analog-input pin a speed transmitter is wired to.",
                                 "default": 5,
-                                "x-position": 17,
+                                "x-position": 19,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -3295,7 +4289,7 @@
                                 "x-required": false,
                                 "description": "Engine speed the transmitter reads at 4 mA.",
                                 "default": 0.0,
-                                "x-position": 18,
+                                "x-position": 20,
                                 "minimum": 0.0
                             },
                             "speed_range_high_rpm": {
@@ -3309,7 +4303,7 @@
                                 "x-required": false,
                                 "description": "Engine speed the transmitter reads at 20 mA.",
                                 "default": 3000.0,
-                                "x-position": 19,
+                                "x-position": 21,
                                 "minimum": 0.0
                             }
                         }
@@ -3337,7 +4331,7 @@
                                 "x-required": false,
                                 "description": "Tag carrying engine RPM.",
                                 "default": null,
-                                "x-position": 20,
+                                "x-position": 22,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -3449,7 +4443,7 @@
                                 "x-required": false,
                                 "description": "For SET_TAG: the tag to write (e.g. an engine controller stop command).",
                                 "default": null,
-                                "x-position": 45,
+                                "x-position": 53,
                                 "properties": {
                                     "reference_name": {
                                         "title": "Reference Name",
@@ -3518,7 +4512,7 @@
                                 "x-required": false,
                                 "description": "Value written to the trip tag. Parsed as JSON where possible (true, 0, \"stop\").",
                                 "default": "true",
-                                "x-position": 46
+                                "x-position": 54
                             }
                         }
                     }
@@ -3547,7 +4541,7 @@
                                 "x-required": false,
                                 "description": "For DIGITAL_OUTPUT: the doovit DO wired to the panel stop input.",
                                 "default": null,
-                                "x-position": 47,
+                                "x-position": 55,
                                 "minimum": 0,
                                 "maximum": 63
                             },
@@ -3562,7 +4556,7 @@
                                 "x-required": false,
                                 "description": "Level driven onto the trip DO when tripping.",
                                 "default": true,
-                                "x-position": 48
+                                "x-position": 56
                             }
                         }
                     }
@@ -3570,5 +4564,200 @@
             ]
         },
         "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@377ec4c6335304692999f5f47e989e127df1e670/icons/pump_analysis_processor.png"
+    },
+    "pump_farm_overview": {
+        "name": "pump_farm_overview",
+        "display_name": "Pump Farm Overview",
+        "type": "PRO",
+        "visibility": "PUB",
+        "allow_many": true,
+        "description": "Farm dashboard of every Pump Analysis pump: current flow, ML pumped today, and diesel/energy used per ML.",
+        "long_description": "README.md",
+        "depends_on": [],
+        "organisation_id": null,
+        "widget": "farm-widget/assets/PumpFarmOverviewWidget.js",
+        "build_widget_command": "npm --prefix farm-widget install && npm --prefix farm-widget run build",
+        "export_config_command": "export-config-farm",
+        "export_ui_command": "export-ui-farm",
+        "lambda_config": {
+            "Runtime": "python3.13",
+            "Timeout": 300,
+            "Handler": "pump_farm_overview.handler",
+            "MemorySize": 128,
+            "Architectures": [
+                "x86_64"
+            ]
+        },
+        "config_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "",
+            "title": "$default",
+            "type": "object",
+            "properties": {
+                "dv_proc_extended_permissions": {
+                    "title": "Devices",
+                    "x-name": "dv_proc_extended_permissions",
+                    "x-hidden": false,
+                    "type": "object",
+                    "x-required": true,
+                    "description": "Give Permission to access devices.",
+                    "x-position": 0,
+                    "properties": {
+                        "devices": {
+                            "title": "Devices",
+                            "x-name": "devices",
+                            "x-hidden": false,
+                            "type": "array",
+                            "x-required": true,
+                            "description": "List of devices to grant extended permissions to.",
+                            "x-position": 1,
+                            "items": {
+                                "title": "Device",
+                                "x-name": "device",
+                                "x-hidden": false,
+                                "format": "doover-resource-device",
+                                "type": "string",
+                                "x-required": true,
+                                "description": "Device ID",
+                                "pattern": "\\d+"
+                            }
+                        },
+                        "groups": {
+                            "title": "Groups",
+                            "x-name": "groups",
+                            "x-hidden": false,
+                            "type": "array",
+                            "x-required": true,
+                            "description": "List of groups to grant permissions to.",
+                            "x-position": 2,
+                            "items": {
+                                "title": "Group",
+                                "x-name": "group",
+                                "x-hidden": false,
+                                "format": "doover-resource-group",
+                                "type": "string",
+                                "x-required": true,
+                                "description": "Group ID",
+                                "pattern": "\\d+"
+                            }
+                        },
+                        "apps_installed": {
+                            "title": "Apps Installed",
+                            "x-name": "apps_installed",
+                            "x-hidden": false,
+                            "type": "array",
+                            "x-required": true,
+                            "description": "Permission will be given to any devices which have any of the apps listed installed.",
+                            "x-position": 3,
+                            "items": {
+                                "title": "Application",
+                                "x-name": "application",
+                                "x-hidden": false,
+                                "format": "doover-resource-application",
+                                "type": "string",
+                                "x-required": true,
+                                "description": "Application"
+                            }
+                        },
+                        "all_devices": {
+                            "title": "All Devices",
+                            "x-name": "all_devices",
+                            "x-hidden": false,
+                            "type": [
+                                "boolean",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Permission will be given for all devices in this organisation. This is a very far-reaching permission to grant!",
+                            "default": false,
+                            "x-position": 4
+                        },
+                        "dd_permissions": {
+                            "title": "Data Permissions",
+                            "x-name": "dd_permissions",
+                            "x-hidden": true,
+                            "format": "dd_permissions",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Permissions granted on each device this app has access to. Leave empty to grant all permissions. Set to 0 to grant none \u2014 for an app that only needs the device map, not access to the devices.",
+                            "default": null,
+                            "x-position": 5
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [
+                        "devices",
+                        "groups",
+                        "apps_installed"
+                    ],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false,
+                    "x-extraDeviceFields": [
+                        "app_installs__name",
+                        "app_installs__application_name"
+                    ]
+                },
+                "title": {
+                    "title": "Title",
+                    "x-name": "title",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Dashboard heading.",
+                    "default": "Farm Pumps",
+                    "x-position": 1
+                },
+                "dv_app_position": {
+                    "title": "Position",
+                    "x-name": "dv_app_position",
+                    "x-hidden": true,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Position of Application in UI Structure. Smaller numbers are closer to the top.",
+                    "default": 100,
+                    "x-position": 2,
+                    "minimum": 0
+                }
+            },
+            "additionalElements": true,
+            "required": [
+                "dv_proc_extended_permissions"
+            ]
+        },
+        "ui_schema": {
+            "displayString": "$config.app().APP_DISPLAY_NAME",
+            "hidden": "$config.app().interpreter_hidden:boolean:false",
+            "fullWidth": "$config.app().interpreter_full_width:boolean:false",
+            "position": "$config.app().dv_app_position:number:100",
+            "icon": null,
+            "colour": null,
+            "defaultOpen": true,
+            "type": "uiApplication",
+            "name": "$config.app().APP_KEY",
+            "children": {
+                "PumpFarmOverviewWidget": {
+                    "name": "PumpFarmOverviewWidget",
+                    "type": "uiRemoteComponent",
+                    "displayString": "Farm Pumps",
+                    "showActivity": true,
+                    "componentUrl": "$config.app().dv_widget_url",
+                    "position": 51,
+                    "hidden": false,
+                    "children": {},
+                    "scope": "PumpFarmOverviewWidget",
+                    "module": "./PumpFarmOverviewWidget",
+                    "app_key": "$config.app().APP_KEY"
+                }
+            }
+        }
     }
 }

@@ -13,6 +13,8 @@ uv run export-config-processor    # processor app variants
 uv run export-ui-processor
 doover app run                    # app + pump simulator via docker-compose
 cd widget && npm run build        # MF remote bundle -> widget/assets/PumpAnalysisWidget.js
+uv run export-config-farm && uv run export-ui-farm   # farm overview app
+cd farm-widget && npm run build   # -> farm-widget/assets/PumpFarmOverviewWidget.js
 ```
 
 ## Structure
@@ -23,6 +25,7 @@ packages/pump_analysis_common/src/pump_analysis_common/
   curve.py        # PumpCurve: interpolation, inversion (head->flow) with dH/dQ confidence
   engine.py       # analyse(Readings, curve, SiteParams) -> Results — deployment-agnostic
   protection.py   # ProtectionMonitor: debounce, start inhibit, trip latch (clock-injected)
+  totaliser.py    # PURE volume / run-hours / fuel / cost integration (state persisted in `_tot_state`)
   sources.py      # gather_readings(config, fetch_ai=?, get_remote=?) — capability-based
   publish.py      # Results -> tags (shared by both apps)
   app_config.py   # shared schema incl. ScaledTagRef sources, CurvePoint array, TripAction
@@ -30,6 +33,8 @@ packages/pump_analysis_common/src/pump_analysis_common/
   app_ui.py       # native UI + ui.RemoteComponent(PumpAnalysisWidget)
 src/pump_analysis_device/       # docker app (type DEV) — AI pins + tags, DO trip
 src/pump_analysis_processor/    # cloud processor (type PRO) — tags only, SET_TAG trip
+src/pump_farm_overview/         # dashboard processor (PRO) hosting farm-widget/ — reads every pump's tags
+farm-widget/                    # farm overview widget; runtime deps React + doover-js only
 widget/                         # React + rsbuild Module Federation + tailwind (shadcn-style)
 simulators/pump/                # synthetic pump: normal -> cavitating sweep every 10 min
 ```
@@ -74,6 +79,10 @@ simulators/pump/                # synthetic pump: normal -> cavitating sweep eve
 - Widget MF contract: rsbuild `name: "PumpAnalysisWidget"`, expose `./PumpAnalysisWidget` —
   must match `scope`/`module` in `app_ui.py`'s RemoteComponent. Build tooling is
   **rsbuild/rspack**, not webpack.
+- **`head_source=FIXED`** is for sites with speed but no pressures: flow comes off the curve
+  at `fixed_total_head_m`, no NPSH. Below the speed that can lift that head, flow is 0, not a fault.
+- **Totals integrate over engine-hour-meter increments when an hours tag is set.** Sleeping
+  sites never publish rpm 0, so their last speed sticks; the meter only moves while running.
 
 ## pydoover conventions used here
 
