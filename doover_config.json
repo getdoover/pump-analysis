@@ -4729,6 +4729,36 @@
                     "default": "",
                     "x-position": 2
                 },
+                "diesel_price_per_litre": {
+                    "title": "Diesel Price ($/L)",
+                    "x-name": "diesel_price_per_litre",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Estimate used to turn each diesel pump's litres per ML into $ per ML.",
+                    "default": 1.8,
+                    "x-position": 3,
+                    "minimum": 0.0,
+                    "maximum": 100.0
+                },
+                "electricity_price_per_kwh": {
+                    "title": "Electricity Price ($/kWh)",
+                    "x-name": "electricity_price_per_kwh",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Estimate used to turn each electric pump's kWh per ML into $ per ML.",
+                    "default": 0.3,
+                    "x-position": 4,
+                    "minimum": 0.0,
+                    "maximum": 100.0
+                },
                 "dv_app_position": {
                     "title": "Position",
                     "x-name": "dv_app_position",
@@ -4740,7 +4770,7 @@
                     "x-required": false,
                     "description": "Position of Application in UI Structure. Smaller numbers are closer to the top.",
                     "default": 100,
-                    "x-position": 3,
+                    "x-position": 5,
                     "minimum": 0
                 }
             },

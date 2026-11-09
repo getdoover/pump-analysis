@@ -35,7 +35,15 @@ const SERIES_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#0
 const SERIES_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 
 interface DashConfig {
-  applications?: Record<string, { title?: string | null; multi_pump_apps?: string | null }>;
+  applications?: Record<
+    string,
+    {
+      title?: string | null;
+      multi_pump_apps?: string | null;
+      diesel_price_per_litre?: number | string | null;
+      electricity_price_per_kwh?: number | string | null;
+    }
+  >;
 }
 
 type PumpTags = Partial<{
@@ -121,12 +129,20 @@ function fmt(v: number | null | undefined, digits = 1): string {
   return v.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-/** What one ML took: diesel litres, else electrical kWh. */
-function perMl(fuel: number | null, energy: number | null): string {
-  if (fuel != null) return `${fmt(fuel, 0)} L`;
-  if (energy != null) return `${fmt(energy, 0)} kWh`;
-  return "—";
+interface Prices {
+  diesel: number;
+  electricity: number;
 }
+const DEFAULT_PRICES: Prices = { diesel: 1.8, electricity: 0.3 };
+
+/** Estimated $ per ML: diesel litres or electrical kWh per ML, times price. */
+function dollarsPerMl(fuel: number | null, energy: number | null, p: Prices): number | null {
+  if (fuel != null) return fuel * p.diesel;
+  if (energy != null) return energy * p.electricity;
+  return null;
+}
+
+const money = (v: number | null) => (v == null ? "—" : `$${fmt(v, 0)}`);
 
 function ago(ts: number | null): string {
   if (ts == null) return "never";
@@ -253,7 +269,18 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
   const appKey = uiElement?.app_key ?? "";
 
   const { data: deployment } = useAgentChannel<DashConfig>(agentId, "deployment_config");
-  const title = deployment?.applications?.[appKey]?.title?.trim() || "Farm Pumps";
+  const appCfg = deployment?.applications?.[appKey];
+  const title = appCfg?.title?.trim() || "Farm Pumps";
+  const prices = useMemo<Prices>(() => {
+    const n = (v: unknown, d: number) => {
+      const x = typeof v === "string" ? parseFloat(v) : v;
+      return typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : d;
+    };
+    return {
+      diesel: n(appCfg?.diesel_price_per_litre, DEFAULT_PRICES.diesel),
+      electricity: n(appCfg?.electricity_price_per_kwh, DEFAULT_PRICES.electricity),
+    };
+  }, [appCfg?.diesel_price_per_litre, appCfg?.electricity_price_per_kwh]);
   const multiPumpApps = useMemo(
     () => (deployment?.applications?.[appKey]?.multi_pump_apps ?? "").split(",").map((a) => a.trim()).filter(Boolean),
     [deployment, appKey],
@@ -423,10 +450,10 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
       vol,
       running,
       today,
-      fuelPerMl: fuelVol > 0 ? fuelL / fuelVol : null,
-      kwhPerMl: kwhVol > 0 ? kwh / kwhVol : null,
+      // farm-wide estimated $/ML today across every pump with usage data
+      dollarsPerMl: fuelVol + kwhVol > 0 ? (fuelL * prices.diesel + kwh * prices.electricity) / (fuelVol + kwhVol) : null,
     };
-  }, [rows, lifts, aggregatesByAgent]);
+  }, [rows, lifts, aggregatesByAgent, prices]);
 
   if (!isLoading && !hasDeviceMap) {
     return <p className="p-4 text-sm text-muted-foreground">Grant this dashboard access to the pump devices in its Devices (extended permissions) config.</p>;
@@ -443,8 +470,11 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
         <Stat label="Pumps running" value={`${totals.running} / ${rows.length}`} />
         <Stat label="Current flow" value={`${fmt(totals.flowMlDay, 1)} ML/day`} sub={`${fmt((totals.flowMlDay * 1000) / 24, 0)} m³/h`} />
         <Stat label="Pumped today" value={`${fmt(totals.vol, 2)} ML`} />
-        {totals.fuelPerMl != null && <Stat label="Diesel per ML today" value={`${fmt(totals.fuelPerMl, 0)} L/ML`} sub="diesel pumps" />}
-        {totals.kwhPerMl != null && <Stat label="Energy per ML today" value={`${fmt(totals.kwhPerMl, 0)} kWh/ML`} sub="electric pumps" />}
+        <Stat
+          label="Cost per ML today"
+          value={totals.dollarsPerMl != null ? `${money(totals.dollarsPerMl)}/ML` : "—"}
+          sub={`est. at $${fmt(prices.diesel, 2)}/L diesel, $${fmt(prices.electricity, 2)}/kWh`}
+        />
       </div>
 
       <div className="rounded-lg border border-border bg-card p-3">
@@ -482,7 +512,7 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
         <table className="w-full border-collapse" style={{ tableLayout: "auto" }}>
           <thead>
             <tr className="text-left text-xs text-muted-foreground">
-              {["Pump", "Status", "Flow", "Pumped today", "Per ML now", "Per ML today", "Updated"].map((h, i) => (
+              {["Pump", "Status", "Flow", "Pumped today", "$/ML now", "$/ML today", "Updated"].map((h, i) => (
                 <th key={h} className={`border-b border-border px-2 py-2 font-medium ${i >= 2 && i <= 5 ? "text-right" : ""}`}>{h}</th>
               ))}
             </tr>
@@ -511,8 +541,8 @@ function Inner({ uiElement, ui_element_props }: { uiElement: { app_key?: string 
                   </td>
                   <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{live ? `${fmt(((num(t.flow_m3h) ?? 0) * 24) / 1000, 1)} ML/d` : "—"}</td>
                   <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{isToday ? `${fmt(num(t.volume_today_ml), 2)} ML` : "0.00 ML"}</td>
-                  <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{live ? perMl(num(t.fuel_per_ml), num(t.energy_per_ml)) : "—"}</td>
-                  <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{isToday ? perMl(num(t.fuel_per_ml_today), num(t.energy_per_ml_today)) : "—"}</td>
+                  <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{live ? money(dollarsPerMl(num(t.fuel_per_ml), num(t.energy_per_ml), prices)) : "—"}</td>
+                  <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{isToday ? money(dollarsPerMl(num(t.fuel_per_ml_today), num(t.energy_per_ml_today), prices)) : "—"}</td>
                   <td className="whitespace-nowrap px-2 py-2 text-xs text-muted-foreground">{ago(r.lastUpdated)}</td>
                 </tr>
               );

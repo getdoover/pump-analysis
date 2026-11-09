@@ -33,6 +33,22 @@ class PumpFarmOverviewConfig(config.Schema):
         default="",
         name="multi_pump_apps",
     )
+    diesel_price_per_litre = config.Number(
+        "Diesel Price ($/L)",
+        description="Estimate used to turn each diesel pump's litres per ML into $ per ML.",
+        default=1.8,
+        minimum=0.0,
+        maximum=100.0,
+        name="diesel_price_per_litre",
+    )
+    electricity_price_per_kwh = config.Number(
+        "Electricity Price ($/kWh)",
+        description="Estimate used to turn each electric pump's kWh per ML into $ per ML.",
+        default=0.3,
+        minimum=0.0,
+        maximum=100.0,
+        name="electricity_price_per_kwh",
+    )
     position = config.ApplicationPosition()
 
 
