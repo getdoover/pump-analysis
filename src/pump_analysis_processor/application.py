@@ -104,6 +104,10 @@ class PumpAnalysisProcessorApp(Application):
     async def _run_analysis(self):
         # Wall-clock is the only clock a stateless invocation has.
         now = time.time()
+        # The processor framework (unlike the docker one) never binds
+        # RemoteTags to their config TagRefs, so every input would silently
+        # read as its default (None). Bind them here; it's idempotent.
+        await self.tags._resolve_remote_tags()
 
         config_faults = []
         sources = [
