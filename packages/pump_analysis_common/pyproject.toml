@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Shared maths core, config, tags and UI for the pump-analysis apps"
 requires-python = ">=3.11"
 dependencies = [
-    "pydoover>=1.12.5",
+    "pydoover>=1.18.6",
     # zoneinfo data for the daily-total rollover; Lambda images don't ship it
     "tzdata>=2024.1",
 ]
