@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .engine import AlertState
+from .engine import AlertState, Results
 
 # CONFIG_FAULT is a running state: the pump is turning and readable, only the
 # analysis is incomplete. Leaving it out would clear run_started_at and re-arm
@@ -136,3 +136,25 @@ class ProtectionMonitor:
         self.trip_reason = ""
         self._danger_since = None
         self._danger_alerted = False
+
+
+def alert_text(pump: str, results: Results, *, danger: bool) -> tuple[str, str]:
+    """(title, body) for a marginal/danger cavitation notification.
+
+    MARGINAL/DANGER come from either the NPSH margin (needs NPSHr from the
+    curve) or the absolute NPSHa floor, which fires with no NPSHr at all —
+    the normal case for a curve without NPSHr points. So the margin can be
+    None here and the text must not assume it.
+    """
+    level = "critical" if danger else "marginal"
+    tail = "cavitation conditions" if danger else "cavitation risk developing"
+    if results.npsh_margin_m is not None:
+        return (
+            f"{pump}: cavitation margin {level}",
+            f"{pump}: NPSH margin {level} ({results.npsh_margin_m:.2f} m) — {tail}",
+        )
+    npsha = f" ({results.npsha_m:.2f} m)" if results.npsha_m is not None else ""
+    return (
+        f"{pump}: suction head {level}",
+        f"{pump}: NPSH available {level}{npsha} — {tail}",
+    )

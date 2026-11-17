@@ -149,3 +149,49 @@ def test_config_fault_counts_as_running():
     assert AlertState.CONFIG_FAULT in RUNNING_STATES
     assert AlertState.NOT_RUNNING not in RUNNING_STATES
     assert AlertState.SENSOR_FAULT not in RUNNING_STATES
+
+
+class TestAlertText:
+    """Alert wording must not assume an NPSH margin exists.
+
+    The absolute NPSHa floor raises MARGINAL/DANGER with no NPSHr on the curve
+    (npsh_margin_m None) — formatting None with :.2f used to crash the cycle
+    at exactly the moment it should have alerted.
+    """
+
+    def test_floor_alert_without_margin(self):
+        from pump_analysis_common.curve import CurvePoint, PumpCurve
+        from pump_analysis_common.engine import AlertState, Readings, SiteParams, analyse
+        from pump_analysis_common.protection import alert_text
+
+        # Warrego-style: curve with no NPSHr, deep suction lift.
+        curve = PumpCurve(
+            [CurvePoint(2840, 22.18), CurvePoint(4000, 20.66), CurvePoint(6440, 10.73)],
+            reference_rpm=680,
+        )
+        r = analyse(
+            Readings(suction_bar_g=-0.75, discharge_bar_g=1.25, engine_rpm=1532),
+            curve,
+            SiteParams(elevation_m=120, speed_ratio=0.4438, default_water_temp_c=28),
+        )
+        assert r.state is AlertState.MARGINAL and r.npsh_margin_m is None
+        title, body = alert_text("P1", r, danger=False)
+        assert title == "P1: suction head marginal"
+        assert f"({r.npsha_m:.2f} m)" in body
+
+    def test_margin_alert_wording_unchanged(self):
+        from pump_analysis_common.engine import AlertState, Results
+        from pump_analysis_common.protection import alert_text
+
+        r = Results(state=AlertState.DANGER, npsh_margin_m=0.31, npsha_m=4.0)
+        assert alert_text("P1", r, danger=True) == (
+            "P1: cavitation margin critical",
+            "P1: NPSH margin critical (0.31 m) — cavitation conditions",
+        )
+
+    def test_no_numbers_at_all(self):
+        from pump_analysis_common.engine import AlertState, Results
+        from pump_analysis_common.protection import alert_text
+
+        title, body = alert_text("P1", Results(state=AlertState.DANGER), danger=True)
+        assert body == "P1: NPSH available critical — cavitation conditions"

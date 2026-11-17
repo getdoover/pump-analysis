@@ -8,7 +8,11 @@ from pydoover.models import NotificationSeverity
 
 from pump_analysis_common.app_config import TripAction
 from pump_analysis_common.engine import analyse
-from pump_analysis_common.protection import ProtectionMonitor, RUNNING_STATES
+from pump_analysis_common.protection import (
+    ProtectionMonitor,
+    RUNNING_STATES,
+    alert_text,
+)
 from pump_analysis_common.publish import (
     TOTALISER_STATE_TAG,
     publish_results,
@@ -91,18 +95,18 @@ class PumpAnalysisDeviceApplication(Application):
         pump = self.config.pump_name.value
 
         if actions.send_marginal_alert:
+            title, body = alert_text(pump, results, danger=False)
             await self.send_notification(
-                f"{pump}: NPSH margin marginal ({results.npsh_margin_m:.2f} m) — "
-                f"cavitation risk developing",
-                title=f"{pump}: cavitation margin marginal",
+                body,
+                title=title,
                 severity=NotificationSeverity.Warn,
                 topic=NOTIFY_TOPIC,
             )
         if actions.send_danger_alert:
+            title, body = alert_text(pump, results, danger=True)
             await self.send_notification(
-                f"{pump}: NPSH margin critical ({results.npsh_margin_m:.2f} m) — "
-                f"cavitation conditions",
-                title=f"{pump}: cavitation margin critical",
+                body,
+                title=title,
                 severity=NotificationSeverity.Critical,
                 topic=NOTIFY_TOPIC,
             )
