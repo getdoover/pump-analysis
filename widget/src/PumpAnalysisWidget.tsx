@@ -330,7 +330,7 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
               (live.rpm == null || Math.round(live.engineRpm) !== Math.round(live.rpm)) && (
                 <Badge variant="outline">Engine {Math.round(live.engineRpm)} RPM</Badge>
               )}
-            {live.pctOfBep != null && (
+            {cfg.showBepPercentage && live.pctOfBep != null && (
               <Badge variant="outline">
                 {live.flowOrigin === "inferred" ? "~" : ""}
                 {Math.round(live.pctOfBep)}% of BEP
@@ -700,7 +700,7 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
 
           <p className="text-xs text-muted-foreground mt-2 mb-0 text-center">
             {live.flowOrigin === "inferred"
-              ? "Flow is read off the pump curve at the measured head, so it is only right if the pump is really on this curve. Wear, cavitation or a wrong speed ratio all make it read high, and nothing here can detect that without a flow meter. The confidence figure reflects curve steepness only."
+              ? "Flow is read off the pump curve at the measured head."
               : live.flowOrigin === "measured"
                 ? "Flow from the configured flow meter."
                 : curveMiss && cfg.headFixed

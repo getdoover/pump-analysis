@@ -655,7 +655,8 @@ def test_flow_confidence_readout_can_be_hidden():
         u._apply_config()
         return u._detail("flow_confidence").hidden
 
-    assert hidden() is False  # inferred flow, shown by default
+    assert hidden() is True  # opt-in: hidden by default
+    assert hidden(show_flow_confidence=True) is False
     assert hidden(show_flow_confidence=False) is True
 
 

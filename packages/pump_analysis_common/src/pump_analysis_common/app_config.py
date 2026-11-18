@@ -593,11 +593,21 @@ class PumpAnalysisConfig(config.Schema):
         description=(
             "Show the confidence figure for curve-inferred flow (the Flow "
             "Confidence readout and the percentage on the pump-curve widget). "
-            "Turning it off only hides the number — inferred flow is still "
+            "Leaving it off only hides the number — inferred flow is still "
             "labelled as inferred, and the confidence is still calculated."
         ),
-        default=True,
+        default=False,
         name="show_flow_confidence",
+    )
+    show_bep_percentage = config.Boolean(
+        "Show % of BEP",
+        description=(
+            "Show the '% of BEP' chip on the pump-curve widget. Needs a BEP "
+            "flow. Off by default: with curve-inferred flow the figure is only "
+            "as good as the inferred flow behind it."
+        ),
+        default=False,
+        name="show_bep_percentage",
     )
     flow_display_units = config.Enum(
         "Flow Display Units",

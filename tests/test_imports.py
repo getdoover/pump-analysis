@@ -51,6 +51,7 @@ def test_config_schema():
         "head_lost_alert_delay_seconds",
         "engine_load_tag",
         "show_flow_confidence",
+        "show_bep_percentage",
         "discharge_normal_low_bar",
         "discharge_normal_high_bar",
         "bep_flow_m3h",

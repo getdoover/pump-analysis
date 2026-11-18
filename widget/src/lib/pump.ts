@@ -30,6 +30,7 @@ export interface PumpConfig {
   pressureFactor: number;
   /** show the confidence figure next to inferred flow (default on) */
   showFlowConfidence: boolean;
+  showBepPercentage: boolean;
   /** head_source = fixed: the head is a configured assumption, not measured */
   headFixed: boolean;
 }
@@ -89,7 +90,8 @@ export function parseConfig(raw: RawConfig): PumpConfig {
     ],
     pressureUnit,
     pressureFactor,
-    showFlowConfidence: raw.show_flow_confidence !== false,
+    showFlowConfidence: raw.show_flow_confidence === true,
+    showBepPercentage: raw.show_bep_percentage === true,
     headFixed: raw.head_source === "fixed",
   };
 }

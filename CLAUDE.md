@@ -54,6 +54,11 @@ simulators/pump/                # synthetic pump: normal -> cavitating sweep eve
 - **Trip defaults to `NONE`** (alert-only). The trip latches (`ProtectionMonitor.tripped`)
   until reset from the UI. Never wire `Application.request_shutdown()` for the pump trip —
   that shuts down the *doovit*.
+- **`.dockerignore` is an allowlist.** The device image gets only `src/`, `packages/`,
+  `pyproject.toml`, `uv.lock`, `README.md` and `simulators/app_config.json`. A new
+  top-level path the device app needs at runtime must be added there or it silently
+  won't be in the image. (CI runs `npm install` for the widget before the image build;
+  without the allowlist `widget/node_modules` shipped in every update, ~80 MB.)
 - **`widget/src/lib/` is un-ignored explicitly** in `.gitignore` — the Python `lib/`
   rule otherwise swallows it, and widget sources silently never get committed.
 - **Inferred flow always ships with `flow_confidence`**; ambiguous curve inversions are capped

@@ -44,10 +44,10 @@ class PumpAnalysisUI(ui.UI):
         inferred = cfg.flow_source_type.value is SourceType.NONE
         flow_el.display_name = "Calculated Flow" if inferred else "Flow"
         flow_el.units = label
-        # Confidence only means something for calculated flow, and a site can
-        # opt out of showing it.
+        # Confidence only means something for calculated flow, and a site has
+        # to opt in to showing it.
         self._detail("flow_confidence").hidden = not (
-            inferred and cfg.show_flow_confidence.value is not False
+            inferred and cfg.show_flow_confidence.value is True
         )
 
         # No trip armed, no latch to clear — the monitor never sets `tripped`

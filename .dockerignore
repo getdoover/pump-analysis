@@ -1,1 +1,19 @@
-.venv
+# The device image only runs the Python app. Everything else in the repo —
+# above all widget/node_modules, which CI populates before the image build —
+# used to ride along in the one layer that changes on every release, so each
+# update re-downloaded ~80 MB. Allowlist what the image needs instead.
+*
+
+!pyproject.toml
+!uv.lock
+# hatchling reads the readme named in pyproject.toml when installing the project
+!README.md
+!src
+!packages
+# the local simulator stack points CONFIG_FP at this file inside the image
+!simulators
+simulators/*
+!simulators/app_config.json
+
+**/__pycache__
+**/*.pyc
