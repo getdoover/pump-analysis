@@ -16,6 +16,7 @@ async def publish_results(
     *,
     flow_display_factor: float = 1.0,
     pressure_display_factor: float = 1.0,
+    npshr_est_bep_m: float | None = None,
 ) -> None:
     suction_bar = (
         None if results.suction_kpa_g is None else results.suction_kpa_g / 100.0
@@ -43,6 +44,9 @@ async def publish_results(
     await tags.npsha_m.set(results.npsha_m)
     await tags.npshr_m.set(results.npshr_m)
     await tags.npsh_margin_m.set(results.npsh_margin_m)
+    await tags.npshr_est_m.set(results.npshr_est_m)
+    await tags.npsh_margin_est_m.set(results.npsh_margin_est_m)
+    await tags.npshr_est_bep_m.set(npshr_est_bep_m)
     await tags.curve_deviation_pct.set(results.curve_deviation_pct)
 
     await tags.state.set(results.state.value)
@@ -54,10 +58,13 @@ async def publish_results(
     await tags.marginal_warning_hidden.set(results.state is not AlertState.MARGINAL)
     await tags.danger_warning_hidden.set(results.state is not AlertState.DANGER)
     await tags.tripped_warning_hidden.set(not monitor.tripped)
+    await tags.head_lost_warning_hidden.set(not monitor.head_lost)
+    # Measured head below the curve is drawn on the widget's chart and has
+    # its own head-lost alert, so it is not raised as a config warning —
+    # every other fault (head above the curve included) still is.
+    warned = [f for f in faults if f != results.no_head_fault]
     await tags.fault_warning_hidden.set(
-        not faults
-        and results.state
-        not in (AlertState.SENSOR_FAULT, AlertState.CONFIG_FAULT)
+        not warned and results.state is not AlertState.SENSOR_FAULT
     )
 
 

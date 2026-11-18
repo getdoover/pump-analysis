@@ -28,6 +28,10 @@ export interface PumpConfig {
   /** display unit label + bar -> display factor */
   pressureUnit: string;
   pressureFactor: number;
+  /** show the confidence figure next to inferred flow (default on) */
+  showFlowConfidence: boolean;
+  /** head_source = fixed: the head is a configured assumption, not measured */
+  headFixed: boolean;
 }
 
 const PRESSURE_UNITS: Record<string, [string, number]> = {
@@ -85,6 +89,8 @@ export function parseConfig(raw: RawConfig): PumpConfig {
     ],
     pressureUnit,
     pressureFactor,
+    showFlowConfidence: raw.show_flow_confidence !== false,
+    headFixed: raw.head_source === "fixed",
   };
 }
 
@@ -95,6 +101,32 @@ export function scaleCurve(curve: CurvePoint[], refRpm: number, liveRpm: number)
     flow_m3h: p.flow_m3h * n,
     head_m: p.head_m * n * n,
     npshr_m: p.npshr_m == null ? null : p.npshr_m * n * n,
+  }));
+}
+
+/** Spread drawn around the estimated NPSHr: it is a rule of thumb, good to
+    about ±40% at best efficiency (see pump_math.npshr_at_bep_m). */
+export const NPSHR_ESTIMATE_SPREAD = 0.4;
+
+/** Estimated NPSHr along a (speed-scaled) curve, for curves published without
+    NPSHr. `anchorM` is the app's estimate at BEP flow and reference speed
+    (tag `npshr_est_bep_m`); `speedScale` is live/reference speed. The shape —
+    flat to BEP, then rising with flow squared — mirrors
+    pump_math.npshr_flow_factor; change both together. */
+export function estimatedNpshr(
+  curve: CurvePoint[],
+  anchorM: number,
+  bepFlowM3h: number,
+  speedScale: number
+): { flow_m3h: number; npshr_m: number }[] {
+  const bep = bepFlowM3h * speedScale;
+  // Make sure the knee at BEP is drawn even when no curve point sits on it.
+  const flows = curve.map((p) => p.flow_m3h);
+  if (flows.length && bep > flows[0] && bep < flows[flows.length - 1]) flows.push(bep);
+  flows.sort((a, b) => a - b);
+  return flows.map((q) => ({
+    flow_m3h: q,
+    npshr_m: anchorM * Math.max(1, (q / bep) ** 2) * speedScale * speedScale,
   }));
 }
 

@@ -41,6 +41,12 @@ class PumpAnalysisTags(tags.Tags):
     raw_engaged = tags.RemoteTag(
         "boolean", reference_name="engaged_input", optional=True, republish_locally=False
     )
+    raw_engine_load = tags.RemoteTag(
+        "number",
+        reference_name="engine_load_input",
+        optional=True,
+        republish_locally=False,
+    )
     raw_engine_hours = tags.RemoteTag(
         "number",
         reference_name="engine_hours_input",
@@ -76,6 +82,12 @@ class PumpAnalysisTags(tags.Tags):
     npsh_margin_m = tags.Number(
         default=None, live=True, log_on=tags.Cross(0.0, deadband=0.2)
     )
+    #: Rough estimates for curves without NPSHr (opt-in). Separate tags so the
+    #: real margin's alerting and logging never see them. ``npshr_est_bep_m``
+    #: is the anchor the widget draws its estimated curve from.
+    npshr_est_m = tags.Number(default=None, live=True)
+    npsh_margin_est_m = tags.Number(default=None, live=True)
+    npshr_est_bep_m = tags.Number(default=None)
     curve_deviation_pct = tags.Number(default=None)
     pct_of_bep = tags.Number(default=None)
 
@@ -109,3 +121,4 @@ class PumpAnalysisTags(tags.Tags):
     danger_warning_hidden = tags.Boolean(default=True)
     tripped_warning_hidden = tags.Boolean(default=True)
     fault_warning_hidden = tags.Boolean(default=True)
+    head_lost_warning_hidden = tags.Boolean(default=True)

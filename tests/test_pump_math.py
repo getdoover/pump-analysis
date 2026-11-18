@@ -246,7 +246,15 @@ class TestCurveIndependentProtection:
         assert r.flow_m3h is None
         assert r.npshr_m is None
         assert r.npsh_margin_m is None
-        assert "operating point off the configured curve" in r.faults
+        assert len(r.faults) == 1
+        assert r.faults[0].startswith("head too low for this speed")
+
+    def test_head_above_shutoff_says_so(self):
+        # 6 bar at 900 rpm is far more head than the curve can make that slow.
+        r = analyse(Readings(0.0, 6.0, 900.0), REF_CURVE, PARAMS)
+        assert r.flow_m3h is None
+        assert len(r.faults) == 1
+        assert r.faults[0].startswith("head above the curve for this speed")
 
     def test_off_curve_does_not_read_as_healthy(self):
         r = analyse(self.OFF_CURVE_HEALTHY, REF_CURVE, PARAMS)
@@ -352,3 +360,321 @@ def test_pressure_display_factor_follows_temperature():
 
     assert build(pressure_display_units="bar").pressure_display() == ("bar", 1.0)
     assert PressureUnits.METRES_HEAD.value == "metres_head"
+
+
+class TestOffCurveIsNotAWarning:
+    """Head off the curve is shown on the widget, not as a native warning."""
+
+    class _Tag:
+        def __init__(self):
+            self.value = None
+
+        async def set(self, v):
+            self.value = v
+
+    class _Tags:
+        def __getattr__(self, name):
+            tag = TestOffCurveIsNotAWarning._Tag()
+            setattr(self, name, tag)
+            return tag
+
+    def _publish(self, readings):
+        import asyncio
+
+        from pump_analysis_common.protection import ProtectionMonitor
+        from pump_analysis_common.publish import publish_results
+
+        tags = self._Tags()
+        r = analyse(readings, REF_CURVE, PARAMS)
+        monitor = ProtectionMonitor(60, 30, 10)
+        asyncio.run(publish_results(tags, r, monitor, []))
+        return r, tags
+
+    def test_off_curve_alone_hides_the_warning_but_keeps_the_text(self):
+        r, tags = self._publish(Readings(0.2, 0.7, 1800.0))
+        assert r.state is AlertState.CONFIG_FAULT
+        assert tags.fault_warning_hidden.value is True
+        assert tags.fault_text.value.startswith("head too low for this speed")
+
+    def test_other_faults_still_warn(self):
+        import asyncio
+
+        from pump_analysis_common.protection import ProtectionMonitor
+        from pump_analysis_common.publish import publish_results
+
+        tags = self._Tags()
+        r = analyse(Readings(0.2, 0.7, 1800.0), REF_CURVE, PARAMS)
+        monitor = ProtectionMonitor(60, 30, 10)
+        asyncio.run(publish_results(tags, r, monitor, ["speed tag not found"]))
+        assert tags.fault_warning_hidden.value is False
+
+    def test_head_above_curve_still_warns(self):
+        # A real config fault: more head than the pump can make at this speed.
+        r, tags = self._publish(Readings(0.0, 6.0, 900.0))
+        assert r.head_below_curve is False
+        assert r.no_head_fault is None
+        assert tags.fault_warning_hidden.value is False
+
+
+def test_fixed_head_fault_does_not_claim_a_measurement():
+    curve = PumpCurve(
+        [CurvePoint(0.0, 20.0), CurvePoint(1000.0, 10.0)], reference_rpm=1000.0
+    )
+    r = analyse(Readings(None, None, 1000.0), curve, SiteParams(fixed_head_m=2.0))
+    assert r.state is AlertState.CONFIG_FAULT
+    assert r.faults[0].startswith("fixed head too low for this speed")
+    assert r.head_below_curve is None  # nothing measured: never "head lost"
+    assert r.no_head_fault is None  # so it keeps its native warning
+
+
+class TestMinimumEngineLoad:
+    PARAMS = SiteParams(min_running_rpm=300.0, min_engine_load_pct=10.0)
+
+    def test_low_load_is_not_running_and_flagged(self):
+        r = analyse(Readings(0.0, 3.0, 1800.0, engine_load_pct=4.0), REF_CURVE, self.PARAMS)
+        assert r.state is AlertState.NOT_RUNNING
+        assert r.unloaded is True
+        assert r.faults == []
+
+    def test_load_at_or_above_the_minimum_runs(self):
+        r = analyse(Readings(0.0, 3.0, 1800.0, engine_load_pct=10.0), REF_CURVE, self.PARAMS)
+        assert r.state is not AlertState.NOT_RUNNING
+        assert r.unloaded is False
+
+    def test_missing_load_reading_falls_back_to_speed(self):
+        r = analyse(Readings(0.0, 3.0, 1800.0), REF_CURVE, self.PARAMS)
+        assert r.state is not AlertState.NOT_RUNNING
+
+    def test_disabled_by_default(self):
+        r = analyse(Readings(0.0, 3.0, 1800.0, engine_load_pct=0.0), REF_CURVE, PARAMS)
+        assert r.state is not AlertState.NOT_RUNNING
+
+    def test_below_running_speed_is_plain_stopped(self):
+        r = analyse(Readings(0.0, 0.0, 100.0, engine_load_pct=0.0), REF_CURVE, self.PARAMS)
+        assert r.state is AlertState.NOT_RUNNING
+        assert r.unloaded is False
+
+
+class TestNpshrEstimate:
+    """Opt-in NPSHr estimate for curves published without one."""
+
+    def test_bep_value_single_suction(self):
+        # 680 rpm, 5000 m3/h = 22,014 US gpm; N*sqrt(Q)/9000 = 11.21;
+        # ^(4/3) = 25.09 ft = 7.65 m.
+        assert pm.npshr_at_bep_m(680.0, 5000.0) == pytest.approx(7.65, abs=0.02)
+
+    def test_double_suction_halves_the_eye_flow(self):
+        # Q/2 per eye -> NPSHr falls by 2^(2/3): 7.65 / 1.587 = 4.82 m.
+        v = pm.npshr_at_bep_m(680.0, 5000.0, double_suction=True)
+        assert v == pytest.approx(4.82, abs=0.02)
+
+    def test_flow_factor_is_flat_to_bep_then_squares(self):
+        assert pm.npshr_flow_factor(0.5) == 1.0
+        assert pm.npshr_flow_factor(1.0) == 1.0
+        assert pm.npshr_flow_factor(1.2) == pytest.approx(1.44)
+
+    # REF_CURVE has NPSHr; strip it to stand in for a head-only datasheet.
+    BARE = PumpCurve(
+        [CurvePoint(p.flow_m3h, p.head_m) for p in REF_CURVE.points],
+        reference_rpm=1800.0,
+    )
+
+    def test_estimate_is_published_but_never_changes_state(self):
+        # Starved suction: an estimate this far under water would be DANGER
+        # if it were allowed to count. It must not be.
+        params = SiteParams(
+            min_running_rpm=300.0, min_npsha_m=0.0,
+            bep_flow_m3h=100.0, npshr_est_bep_m=20.0,
+        )
+        r = analyse(Readings(-0.5, 3.0, 1800.0), self.BARE, params)
+        assert r.flow_m3h is not None
+        assert r.npshr_m is None and r.npsh_margin_m is None
+        assert r.npshr_est_m is not None
+        assert r.npsh_margin_est_m == pytest.approx(r.npsha_m - r.npshr_est_m)
+        assert r.npsh_margin_est_m < 0
+        assert r.state is AlertState.OK
+
+    def test_estimate_scales_with_speed_and_flow(self):
+        params = SiteParams(
+            min_running_rpm=300.0, bep_flow_m3h=100.0, npshr_est_bep_m=4.0
+        )
+        r = analyse(Readings(0.0, 1.0, 900.0), self.BARE, params)
+        speed = 0.5
+        ratio = r.flow_m3h / (100.0 * speed)
+        assert r.npshr_est_m == pytest.approx(4.0 * max(1.0, ratio**2) * speed**2)
+
+    def test_real_npshr_wins_over_the_estimate(self):
+        params = SiteParams(
+            min_running_rpm=300.0, bep_flow_m3h=100.0, npshr_est_bep_m=20.0
+        )
+        r = analyse(Readings(0.0, 3.0, 1800.0), REF_CURVE, params)
+        assert r.npshr_m is not None
+        assert r.npshr_est_m is None and r.npsh_margin_est_m is None
+
+    def test_off_by_default(self):
+        r = analyse(Readings(0.0, 3.0, 1800.0), self.BARE, PARAMS)
+        assert r.npshr_est_m is None
+
+
+def test_npshr_estimate_config_gating():
+    from pump_analysis_common.app_config import PumpAnalysisConfig
+
+    def cfg(**over):
+        c = PumpAnalysisConfig()
+        base = {
+            "curve_reference_speed_rpm": 680,
+            "bep_flow_m3h": 5000,
+            "estimate_npshr": True,
+            "pump_curve": [
+                {"flow_m3h": 3000, "head_m": 22},
+                {"flow_m3h": 7000, "head_m": 7},
+            ],
+        }
+        base.update(over)
+        c._inject_deployment_config(base)
+        return c
+
+    assert cfg().npshr_estimate_bep_m() == pytest.approx(7.65, abs=0.02)
+    assert cfg(impeller_suction="double").npshr_estimate_bep_m() == pytest.approx(4.82, abs=0.02)
+    assert cfg(estimate_npshr=False).npshr_estimate_bep_m() is None
+    assert cfg(bep_flow_m3h=None).npshr_estimate_bep_m() is None
+    real = [
+        {"flow_m3h": 3000, "head_m": 22, "npshr_m": 4.0},
+        {"flow_m3h": 7000, "head_m": 7, "npshr_m": 9.0},
+    ]
+    assert cfg(pump_curve=real).npshr_estimate_bep_m() is None
+
+
+class TestPressureReadoutBands:
+    """Inlet/discharge colour bands derived from NPSH limits and the curve."""
+
+    WARREGO = {
+        "curve_reference_speed_rpm": 680,
+        "minimum_running_speed_rpm": 470,
+        "site_elevation_m": 90,
+        "default_water_temperature_c": 28,
+        "gauge_separation_m": 0.5,
+        "minimum_npsha_m": 1.5,
+        "npsh_warning_margin_m": 1.5,
+        "npsh_danger_margin_m": 0.5,
+        "pump_curve": [
+            {"flow_m3h": 2840, "head_m": 22.18},
+            {"flow_m3h": 7000, "head_m": 7.07},
+        ],
+    }
+
+    def cfg(self, **over):
+        from pump_analysis_common.app_config import PumpAnalysisConfig
+
+        c = PumpAnalysisConfig()
+        c._inject_deployment_config({**self.WARREGO, **over})
+        return c
+
+    def test_suction_threshold_inverts_npsha(self):
+        kpa = pm.suction_kpa_at_npsha(3.0, 100.0, 3.8, 996.0, gauge_height_above_impeller_m=0.4)
+        assert pm.npsh_available_m(
+            kpa, 100.0, 3.8, 996.0, gauge_height_above_impeller_m=0.4
+        ) == pytest.approx(3.0)
+
+    def test_inlet_thresholds_are_where_npsha_hits_the_floor(self):
+        c = self.cfg()
+        danger, warn, from_npshr = c.inlet_thresholds_bar()
+        assert from_npshr is False
+        p = c.to_site_params()
+        baro = pm.barometric_pressure_kpa(90)
+        vap = pm.water_vapour_pressure_kpa(28)
+        rho = pm.water_density_kg_m3(28)
+        assert pm.npsh_available_m(danger * 100, baro, vap, rho) == pytest.approx(1.5)
+        assert pm.npsh_available_m(warn * 100, baro, vap, rho) == pytest.approx(3.0)
+        # ~-0.82 / ~-0.67 bar at this site: the pump's -0.47 bar is healthy.
+        assert danger == pytest.approx(-0.82, abs=0.02)
+        assert warn == pytest.approx(-0.67, abs=0.02)
+        assert p.min_npsha_m == 1.5
+
+    def test_inlet_uses_npshr_at_bep_when_the_curve_has_it(self):
+        pts = [
+            {"flow_m3h": 2840, "head_m": 22.18, "npshr_m": 4.0},
+            {"flow_m3h": 7000, "head_m": 7.07, "npshr_m": 8.0},
+        ]
+        c = self.cfg(pump_curve=pts, bep_flow_m3h=2840)
+        danger, warn, from_npshr = c.inlet_thresholds_bar()
+        assert from_npshr is True
+        rho = pm.water_density_kg_m3(28)
+        args = (pm.barometric_pressure_kpa(90), pm.water_vapour_pressure_kpa(28), rho)
+        assert pm.npsh_available_m(danger * 100, *args) == pytest.approx(4.5)
+        assert pm.npsh_available_m(warn * 100, *args) == pytest.approx(5.5)
+
+    def test_inlet_unknown_without_a_floor_or_npshr(self):
+        assert self.cfg(minimum_npsha_m=0).inlet_thresholds_bar() is None
+
+    def test_discharge_band_follows_the_curve(self):
+        low, high = self.cfg().discharge_normal_bar()
+        k = pm.water_density_kg_m3(28) * pm.G / 100_000.0
+        assert high == pytest.approx((22.18 - 0.5) * k)
+        assert low == pytest.approx(
+            (7.07 * (470 / 680) ** 2 - 0.5) * k + self.cfg().inlet_thresholds_bar()[1]
+        )
+        assert low < 1.1 < high  # the pump's healthy 1.1 bar is green
+
+    def test_discharge_overrides_win(self):
+        c = self.cfg(discharge_normal_low_bar=0.8, discharge_normal_high_bar=1.6)
+        assert c.discharge_normal_bar() == (0.8, 1.6)
+
+    def test_one_override_keeps_the_other_side_smart(self):
+        c = self.cfg(discharge_normal_low_bar=0.8)
+        low, high = c.discharge_normal_bar()
+        assert low == 0.8
+        assert high == pytest.approx(self.cfg().discharge_normal_bar()[1])
+
+    def test_ui_applies_them(self):
+        from pump_analysis_common.app_ui import PumpAnalysisUI
+
+        u = PumpAnalysisUI(None, None, None)
+        u.config = self.cfg(pressure_display_units="bar")
+        u._apply_config()
+        inlet = u._detail("inlet_pressure").ranges
+        # No NPSHr on this curve: the bands mark the floor, and nothing is
+        # called healthy.
+        assert [r.label for r in inlet] == [
+            "Below NPSHa floor", "Near NPSHa floor", "Above NPSHa floor",
+        ]
+        assert "Healthy" not in [r.label for r in inlet]
+        discharge = u._detail("discharge_pressure").ranges
+        assert [r.label for r in discharge] == ["Low", "Normal", "High"]
+
+
+def test_flow_confidence_readout_can_be_hidden():
+    from pump_analysis_common.app_config import PumpAnalysisConfig
+    from pump_analysis_common.app_ui import PumpAnalysisUI
+
+    def hidden(**over):
+        c = PumpAnalysisConfig()
+        c._inject_deployment_config({"pump_curve": [], **over})
+        u = PumpAnalysisUI(None, None, None)
+        u.config = c
+        u._apply_config()
+        return u._detail("flow_confidence").hidden
+
+    assert hidden() is False  # inferred flow, shown by default
+    assert hidden(show_flow_confidence=False) is True
+
+
+def test_inlet_bands_only_say_healthy_with_real_npshr():
+    from pump_analysis_common.app_config import PumpAnalysisConfig
+    from pump_analysis_common.app_ui import PumpAnalysisUI
+
+    c = PumpAnalysisConfig()
+    c._inject_deployment_config({
+        **TestPressureReadoutBands.WARREGO,
+        "bep_flow_m3h": 2840,
+        "pump_curve": [
+            {"flow_m3h": 2840, "head_m": 22.18, "npshr_m": 4.0},
+            {"flow_m3h": 7000, "head_m": 7.07, "npshr_m": 8.0},
+        ],
+    })
+    u = PumpAnalysisUI(None, None, None)
+    u.config = c
+    u._apply_config()
+    assert [r.label for r in u._detail("inlet_pressure").ranges] == [
+        "Cavitation risk", "Marginal", "Healthy",
+    ]

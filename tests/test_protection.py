@@ -195,3 +195,161 @@ class TestAlertText:
 
         title, body = alert_text("P1", Results(state=AlertState.DANGER), danger=True)
         assert body == "P1: NPSH available critical — cavitation conditions"
+
+
+class TestHeadLost:
+    """Head established, then lost, while the pump keeps running."""
+
+    def monitor(self, delay=60.0):
+        return ProtectionMonitor(
+            start_inhibit_s=0, alert_debounce_s=30, trip_debounce_s=10,
+            head_lost_delay_s=delay,
+        )
+
+    def test_alerts_once_after_the_delay(self):
+        m = self.monitor()
+        assert not m.update(AlertState.OK, 0, False).send_head_lost_alert
+        assert not m.update(AlertState.CONFIG_FAULT, 10, True).send_head_lost_alert
+        assert not m.update(AlertState.CONFIG_FAULT, 69, True).send_head_lost_alert
+        assert not m.head_lost
+        assert m.update(AlertState.CONFIG_FAULT, 70, True).send_head_lost_alert
+        assert m.head_lost
+        # no repeat while it persists
+        assert not m.update(AlertState.CONFIG_FAULT, 500, True).send_head_lost_alert
+        assert m.head_lost
+
+    def test_never_built_head_never_alerts(self):
+        # Idling / never primed: nothing was lost.
+        m = self.monitor()
+        for t in (0, 100, 1000):
+            assert not m.update(AlertState.CONFIG_FAULT, t, True).send_head_lost_alert
+        assert not m.head_lost
+
+    def test_brief_dip_does_not_alert_and_restarts_the_clock(self):
+        m = self.monitor()
+        m.update(AlertState.OK, 0, False)
+        m.update(AlertState.CONFIG_FAULT, 10, True)
+        m.update(AlertState.OK, 50, False)
+        m.update(AlertState.CONFIG_FAULT, 60, True)
+        assert not m.update(AlertState.CONFIG_FAULT, 100, True).send_head_lost_alert
+        assert m.update(AlertState.CONFIG_FAULT, 120, True).send_head_lost_alert
+
+    def test_head_returning_clears_and_rearms(self):
+        m = self.monitor()
+        m.update(AlertState.OK, 0, False)
+        m.update(AlertState.CONFIG_FAULT, 10, True)
+        assert m.update(AlertState.CONFIG_FAULT, 70, True).send_head_lost_alert
+        m.update(AlertState.OK, 80, False)
+        assert not m.head_lost
+        m.update(AlertState.CONFIG_FAULT, 90, True)
+        assert m.update(AlertState.CONFIG_FAULT, 150, True).send_head_lost_alert
+
+    def test_stopping_the_pump_clears_it(self):
+        m = self.monitor()
+        m.update(AlertState.OK, 0, False)
+        m.update(AlertState.CONFIG_FAULT, 10, True)
+        m.update(AlertState.CONFIG_FAULT, 70, True)
+        m.update(AlertState.NOT_RUNNING, 80, None)
+        assert not m.head_lost
+        # the next run has to build head again before it can lose it
+        assert not m.update(AlertState.CONFIG_FAULT, 200, True).send_head_lost_alert
+        assert not m.update(AlertState.CONFIG_FAULT, 400, True).send_head_lost_alert
+
+    def test_start_inhibit_neither_establishes_nor_loses_head(self):
+        m = self.monitor()
+        m.update(AlertState.STARTING, 0, False)
+        m.update(AlertState.CONFIG_FAULT, 10, True)
+        assert not m.update(AlertState.CONFIG_FAULT, 100, True).send_head_lost_alert
+
+    def test_head_lost_still_alerts_under_a_danger_state(self):
+        # NPSHa floor can hold DANGER while the head is also gone.
+        m = self.monitor()
+        m.update(AlertState.OK, 0, False)
+        m.update(AlertState.DANGER, 10, True)
+        assert m.update(AlertState.DANGER, 70, True).send_head_lost_alert
+
+    def test_slowing_the_pump_down_is_not_head_lost(self):
+        m = self.monitor()
+        m.update(AlertState.OK, 0, False, 680.0)
+        for t in (10, 100, 1000):
+            a = m.update(AlertState.CONFIG_FAULT, t, True, 534.0)  # dropped to idle
+            assert not a.send_head_lost_alert
+        assert not m.head_lost
+
+    def test_head_lost_at_held_speed_alerts(self):
+        m = self.monitor()
+        m.update(AlertState.OK, 0, False, 680.0)
+        m.update(AlertState.CONFIG_FAULT, 10, True, 670.0)
+        assert m.update(AlertState.CONFIG_FAULT, 70, True, 670.0).send_head_lost_alert
+
+    def test_speeding_back_up_without_head_alerts(self):
+        # Prime lost while idling: back at duty speed the head never returns.
+        m = self.monitor()
+        m.update(AlertState.OK, 0, False, 680.0)
+        m.update(AlertState.CONFIG_FAULT, 10, True, 534.0)
+        m.update(AlertState.CONFIG_FAULT, 300, True, 680.0)
+        assert not m.update(AlertState.CONFIG_FAULT, 359, True, 680.0).send_head_lost_alert
+        assert m.update(AlertState.CONFIG_FAULT, 360, True, 680.0).send_head_lost_alert
+
+    def test_load_shed_at_held_speed_still_alerts(self):
+        # Low engine load reads as "not running", but at an unchanged speed a
+        # pump run dry looks identical to a declutched one — keep watching.
+        m = self.monitor()
+        m.update(AlertState.OK, 0, False, 680.0)
+        m.update(AlertState.NOT_RUNNING, 10, None, 680.0, True)
+        assert m.update(AlertState.NOT_RUNNING, 70, None, 680.0, True).send_head_lost_alert
+        assert m.head_lost
+
+    def test_load_shed_after_slowing_down_is_quiet(self):
+        m = self.monitor()
+        m.update(AlertState.OK, 0, False, 680.0)
+        for t in (10, 100, 1000):
+            a = m.update(AlertState.NOT_RUNNING, t, None, 534.0, True)
+            assert not a.send_head_lost_alert
+
+    def test_low_load_without_prior_head_is_quiet(self):
+        m = self.monitor()
+        for t in (0, 100, 1000):
+            a = m.update(AlertState.NOT_RUNNING, t, None, 534.0, True)
+            assert not a.send_head_lost_alert
+
+
+class TestSensorFaultAlert:
+    def monitor(self):
+        return ProtectionMonitor(start_inhibit_s=0, alert_debounce_s=30, trip_debounce_s=10)
+
+    def test_alerts_once_after_the_debounce(self):
+        m = self.monitor()
+        assert not m.update(AlertState.SENSOR_FAULT, 0).send_sensor_fault_alert
+        assert not m.update(AlertState.SENSOR_FAULT, 29).send_sensor_fault_alert
+        assert m.update(AlertState.SENSOR_FAULT, 30).send_sensor_fault_alert
+        assert not m.update(AlertState.SENSOR_FAULT, 600).send_sensor_fault_alert
+
+    def test_a_glitch_shorter_than_the_debounce_is_quiet(self):
+        m = self.monitor()
+        m.update(AlertState.SENSOR_FAULT, 0)
+        m.update(AlertState.OK, 10)
+        assert not m.update(AlertState.SENSOR_FAULT, 35).send_sensor_fault_alert
+
+    def test_rearms_after_clearing(self):
+        m = self.monitor()
+        m.update(AlertState.SENSOR_FAULT, 0)
+        assert m.update(AlertState.SENSOR_FAULT, 30).send_sensor_fault_alert
+        m.update(AlertState.OK, 40)
+        m.update(AlertState.SENSOR_FAULT, 50)
+        assert m.update(AlertState.SENSOR_FAULT, 80).send_sensor_fault_alert
+
+    def test_stopped_pump_never_alerts(self):
+        # Sensors that power down with the engine: NOT_RUNNING, not SENSOR_FAULT.
+        m = self.monitor()
+        for t in (0, 100, 1000):
+            assert not m.update(AlertState.NOT_RUNNING, t).send_sensor_fault_alert
+
+    def test_text_names_the_fault(self):
+        from pump_analysis_common.protection import sensor_fault_text
+
+        title, body = sensor_fault_text(
+            "Pump 2", ["discharge pressure: loop current 0.00 mA out of band"]
+        )
+        assert title == "Pump 2: sensor fault while pump running"
+        assert "loop current 0.00 mA" in body

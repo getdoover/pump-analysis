@@ -20,6 +20,8 @@ from pump_analysis_common.protection import (
     ProtectionMonitor,
     RUNNING_STATES,
     alert_text,
+    head_lost_text,
+    sensor_fault_text,
 )
 from pump_analysis_common.publish import (
     TOTALISER_STATE_TAG,
@@ -45,6 +47,7 @@ REMOTE_TAGS = {
     "speed_input": "raw_speed",
     "water_temp_input": "raw_water_temp",
     "engaged_input": "raw_engaged",
+    "engine_load_input": "raw_engine_load",
     "engine_hours_input": "raw_engine_hours",
     "fuel_rate_input": "raw_fuel_rate",
     "power_input": "raw_power",
@@ -75,6 +78,7 @@ class PumpAnalysisProcessorApp(Application):
             alert_debounce_s=self.config.alert_debounce_seconds.value,
             trip_debounce_s=self.config.trip_debounce_seconds.value,
             trip_armed=armed,
+            head_lost_delay_s=self.config.head_lost_alert_delay_seconds.value,
         )
         state = self.get_tag("_mon_state") or {}
         m.run_started_at = state.get("run_started_at")
@@ -83,6 +87,12 @@ class PumpAnalysisProcessorApp(Application):
         m._danger_since = state.get("danger_since")
         m._marginal_alerted = state.get("marginal_alerted", False)
         m._danger_alerted = state.get("danger_alerted", False)
+        m._sensor_fault_since = state.get("sensor_fault_since")
+        m._sensor_fault_alerted = state.get("sensor_fault_alerted", False)
+        m._head_seen = state.get("head_seen", False)
+        m._head_seen_rpm = state.get("head_seen_rpm")
+        m._head_lost_since = state.get("head_lost_since")
+        m._head_lost_alerted = state.get("head_lost_alerted", False)
         m.tripped = armed and bool(self.tags.tripped.get())
         m.trip_reason = self.tags.trip_reason.get() or ""
         return m
@@ -97,6 +107,12 @@ class PumpAnalysisProcessorApp(Application):
                 "danger_since": m._danger_since,
                 "marginal_alerted": m._marginal_alerted,
                 "danger_alerted": m._danger_alerted,
+                "sensor_fault_since": m._sensor_fault_since,
+                "sensor_fault_alerted": m._sensor_fault_alerted,
+                "head_seen": m._head_seen,
+                "head_seen_rpm": m._head_seen_rpm,
+                "head_lost_since": m._head_lost_since,
+                "head_lost_alerted": m._head_lost_alerted,
             },
         )
 
@@ -148,8 +164,31 @@ class PumpAnalysisProcessorApp(Application):
         inhibit = monitor.in_start_inhibit(running, now)
         results = analyse(readings, curve, site_params, in_start_inhibit=inhibit)
 
-        actions = monitor.update(results.state, now)
+        actions = monitor.update(
+            results.state,
+            now,
+            results.head_below_curve,
+            results.pump_rpm,
+            results.unloaded,
+        )
         pump = self.config.pump_name.value
+
+        if actions.send_sensor_fault_alert:
+            title, body = sensor_fault_text(pump, config_faults + results.faults)
+            await self.send_notification(
+                body,
+                title=title,
+                severity=NotificationSeverity.Warn,
+                topic=NOTIFY_TOPIC,
+            )
+        if actions.send_head_lost_alert:
+            title, body = head_lost_text(pump, results)
+            await self.send_notification(
+                body,
+                title=title,
+                severity=NotificationSeverity.Warn,
+                topic=NOTIFY_TOPIC,
+            )
 
         if actions.send_marginal_alert:
             title, body = alert_text(pump, results, danger=False)
@@ -179,6 +218,7 @@ class PumpAnalysisProcessorApp(Application):
             config_faults,
             flow_display_factor=flow_factor,
             pressure_display_factor=pressure_factor,
+            npshr_est_bep_m=site_params.npshr_est_bep_m,
         )
         await self._save_monitor(monitor)
         await self._update_totals(results.flow_m3h, now)

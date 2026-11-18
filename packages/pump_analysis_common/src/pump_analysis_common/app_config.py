@@ -78,6 +78,11 @@ class HeadSource(enum.Enum):
     FIXED = "fixed"  # an assumed total head, for sites without pressures
 
 
+class ImpellerSuction(enum.Enum):
+    SINGLE = "single"
+    DOUBLE = "double"
+
+
 class TripAction(enum.Enum):
     NONE = "none"  # alert only — the commissioning default
     SET_TAG = "set_tag"  # write a value to another app's tag (e.g. Kensho stop)
@@ -98,6 +103,7 @@ SPEED_FROM_AI = config.equal("speed_source_type", SourceType.ANALOGUE_IN)
 SPEED_FROM_TAG = config.equal("speed_source_type", SourceType.TAG)
 HEAD_IS_FIXED = config.equal("head_source", HeadSource.FIXED)
 # Trip wiring: one branch per action, so an alert-only install sees neither.
+NPSHR_IS_ESTIMATED = config.equal("estimate_npshr", True)
 TRIP_SETS_TAG = config.equal("trip_action", TripAction.SET_TAG)
 TRIP_DRIVES_DO = config.equal("trip_action", TripAction.DIGITAL_OUTPUT)
 
@@ -313,6 +319,26 @@ class PumpAnalysisConfig(config.Schema):
         show_if=DISCHARGE_FROM_AI,
         name="discharge_range_high_bar",
     )
+    discharge_normal_low_bar = config.Number(
+        "Discharge Normal Low (bar)",
+        description=(
+            "Optional. Bottom of the green band on the Discharge Pressure "
+            "readout. Leave empty to work it out from the pump curve."
+        ),
+        default=None,
+        advanced=True,
+        name="discharge_normal_low_bar",
+    )
+    discharge_normal_high_bar = config.Number(
+        "Discharge Normal High (bar)",
+        description=(
+            "Optional. Top of the green band on the Discharge Pressure "
+            "readout. Leave empty to work it out from the pump curve."
+        ),
+        default=None,
+        advanced=True,
+        name="discharge_normal_high_bar",
+    )
     discharge_tag = _source_tag(
         "Discharge Tag",
         "discharge_input",
@@ -440,6 +466,32 @@ class PumpAnalysisConfig(config.Schema):
         name="pump_engaged_tag",
     )
 
+    engine_load_tag = ScaledTagRef(
+        "Engine Load Tag",
+        description=(
+            "Optional engine load tag (percent). Used with Minimum Engine Load "
+            "to tell a declutched engine from a driven pump when the controller "
+            "has no clutch signal."
+        ),
+        default=None,
+        reference_name__default="engine_load_input",
+        reference_name__hidden=True,
+        name="engine_load_tag",
+    )
+    minimum_engine_load_pct = config.Number(
+        "Minimum Engine Load (%)",
+        description=(
+            "Below this engine load the pump counts as not running even if the "
+            "engine is above the minimum running speed. Set it between the load "
+            "seen idling declutched and the lowest load seen pumping. Needs the "
+            "Engine Load Tag. Leave empty to disable."
+        ),
+        default=None,
+        minimum=0.0,
+        maximum=100.0,
+        name="minimum_engine_load_pct",
+    )
+
     # --- Usage (fuel / energy per ML pumped) ---
     engine_hours_tag = ScaledTagRef(
         "Engine Hours Tag",
@@ -536,6 +588,17 @@ class PumpAnalysisConfig(config.Schema):
         advanced=True,
         name="show_widget_gauges",
     )
+    show_flow_confidence = config.Boolean(
+        "Show Flow Confidence",
+        description=(
+            "Show the confidence figure for curve-inferred flow (the Flow "
+            "Confidence readout and the percentage on the pump-curve widget). "
+            "Turning it off only hides the number — inferred flow is still "
+            "labelled as inferred, and the confidence is still calculated."
+        ),
+        default=True,
+        name="show_flow_confidence",
+    )
     flow_display_units = config.Enum(
         "Flow Display Units",
         description=(
@@ -577,6 +640,44 @@ class PumpAnalysisConfig(config.Schema):
             "Digitise from the datasheet."
         ),
         name="pump_curve",
+    )
+    estimate_npshr = config.Boolean(
+        "Estimate NPSHr",
+        description=(
+            "For a curve published without NPSHr: draw a rough estimated NPSHr "
+            "on the pump-curve widget, worked out from the BEP flow and a "
+            "typical inlet design. Good to about ±40% at best, so it is shown "
+            "as an estimate only and never raises an alert or a trip. Needs "
+            "BEP Flow. Ignored once the curve points carry NPSHr."
+        ),
+        default=False,
+        name="estimate_npshr",
+    )
+    impeller_suction = config.Enum(
+        "Impeller Suction",
+        description=(
+            "Single or double suction (water entering one or both sides of the "
+            "impeller). A double-suction pump needs noticeably less NPSH. If "
+            "unsure leave it on single, which gives the higher estimate."
+        ),
+        choices=ImpellerSuction,
+        default=ImpellerSuction.SINGLE,
+        show_if=NPSHR_IS_ESTIMATED,
+        name="impeller_suction",
+    )
+    suction_specific_speed = config.Number(
+        "Suction Specific Speed",
+        description=(
+            "Assumed suction specific speed in US units (rpm, US gpm, ft). "
+            "Typical pumps sit around 8,000-11,000; lower gives a higher, more "
+            "cautious NPSHr estimate."
+        ),
+        default=9000.0,
+        minimum=3000.0,
+        maximum=20000.0,
+        advanced=True,
+        show_if=NPSHR_IS_ESTIMATED,
+        name="suction_specific_speed",
     )
     curve_reference_speed_rpm = config.Number(
         "Curve Reference Speed (RPM)",
@@ -690,6 +791,19 @@ class PumpAnalysisConfig(config.Schema):
         advanced=True,
         name="alert_debounce_seconds",
     )
+    head_lost_alert_delay_seconds = config.Number(
+        "Head Lost Alert Delay (Seconds)",
+        description=(
+            "If the pump has been making head and the head then drops below "
+            "the pump curve while the pump keeps running, an alert is sent "
+            "once that has lasted this long. Needs a pump curve and measured "
+            "pressures."
+        ),
+        default=60.0,
+        minimum=0.0,
+        maximum=3600.0,
+        name="head_lost_alert_delay_seconds",
+    )
     trip_debounce_seconds = config.Number(
         "Trip Debounce (Seconds)",
         description="DANGER must persist this long before the trip action fires.",
@@ -765,6 +879,119 @@ class PumpAnalysisConfig(config.Schema):
             )
         return label, factor
 
+    # ---- readout bands (bar gauge) — what the pressure colours mean
+    def _fluid(self) -> tuple[float, float, float]:
+        """(density kg/m³, barometric kPa, vapour pressure kPa) for this site."""
+        temp_c = self.default_water_temperature_c.value or 20.0
+        sg = self.fluid_specific_gravity.value
+        density = sg * 1000.0 if sg else pump_math.water_density_kg_m3(temp_c)
+        return (
+            density,
+            pump_math.barometric_pressure_kpa(self.site_elevation_m.value or 0.0),
+            pump_math.water_vapour_pressure_kpa(temp_c),
+        )
+
+    def inlet_thresholds_bar(self) -> tuple[float, float, bool] | None:
+        """(danger, warning, from_npshr) inlet pressures, bar gauge, or None.
+
+        ``from_npshr`` says whether the pump's own NPSHr set the thresholds.
+        When it is False they come from the Minimum NPSHa floor alone, which
+        is a site setting and says nothing about this pump — the readout must
+        not call that band healthy.
+
+        The suction readings at which NPSHa reaches the levels the app alarms
+        on: the Minimum NPSHa floor, and — when the curve carries NPSHr and a
+        BEP flow is set — NPSHr at BEP plus the danger/warning margins,
+        whichever is higher. So red on the readout means the app is (or is
+        about to be) in DANGER, not an arbitrary vacuum depth.
+        """
+        warn_margin = self.npsh_warning_margin_m.value or 1.5
+        danger_margin = self.npsh_danger_margin_m.value or 0.5
+        floor = self.minimum_npsha_m.value or 0.0
+        danger_npsha = floor
+        warn_npsha = floor + warn_margin if floor else 0.0
+
+        curve = self.build_curve()
+        bep = self.bep_flow_m3h.value
+        npshr = curve.npshr_at_flow(bep) if curve is not None and bep else None
+        if npshr is not None:
+            danger_npsha = max(danger_npsha, npshr + danger_margin)
+            warn_npsha = max(warn_npsha, npshr + warn_margin)
+        if danger_npsha <= 0.0:
+            return None
+
+        density, baro, vapour = self._fluid()
+        height = self.suction_gauge_height_above_impeller_m.value or 0.0
+
+        def bar(npsha_m: float) -> float:
+            return (
+                pump_math.suction_kpa_at_npsha(
+                    npsha_m, baro, vapour, density,
+                    gauge_height_above_impeller_m=height,
+                )
+                / 100.0
+            )
+
+        return bar(danger_npsha), bar(warn_npsha), npshr is not None
+
+    def discharge_normal_bar(self) -> tuple[float, float] | None:
+        """(low, high) of the healthy discharge band, bar gauge, or None.
+
+        Explicit Discharge Normal Low/High win. Otherwise it is the pump curve
+        seen from the discharge gauge: discharge = suction + total head −
+        gauge separation, taken over every head the curve can produce between
+        the minimum running speed (run-out) and the reference speed
+        (shut-off), with suction anywhere from its warning threshold up to
+        atmospheric. Discharge outside that band cannot be a healthy pump on
+        this curve. It is necessarily wide — discharge alone does not fix the
+        operating point; Total Head is the reading that does.
+        """
+        low = self.discharge_normal_low_bar.value
+        high = self.discharge_normal_high_bar.value
+        if low is not None and high is not None:
+            return (low, high) if high > low else None
+
+        curve = self.build_curve()
+        if curve is None or self.head_source.value is HeadSource.FIXED:
+            return None
+        heads = [p.head_m for p in curve.points]
+        min_rpm = self.minimum_running_speed_rpm.value or 300.0
+        slowest = min(min_rpm / curve.reference_rpm, 1.0) ** 2
+        density, _, _ = self._fluid()
+        bar_per_m = density * pump_math.G / 100_000.0
+        sep = self.gauge_separation_m.value or 0.0
+        inlet = self.inlet_thresholds_bar()
+        suction_low = inlet[1] if inlet else -0.5
+        if low is None:
+            low = (min(heads) * slowest - sep) * bar_per_m + suction_low
+        if high is None:
+            high = (max(heads) - sep) * bar_per_m
+        return (low, high) if high > low else None
+
+    def npshr_estimate_bep_m(self) -> float | None:
+        """Estimated NPSHr at BEP and reference speed, or None when not in use.
+
+        In use only when opted in, BEP flow and reference speed are set, and
+        the curve has no usable NPSHr of its own (fewer than two points).
+        """
+        if not self.estimate_npshr.value:
+            return None
+        bep = self.bep_flow_m3h.value
+        ref_rpm = self.curve_reference_speed_rpm.value
+        if not bep or not ref_rpm:
+            return None
+        with_npshr = [
+            p for p in (self.pump_curve.elements or []) if p.npshr_m.value is not None
+        ]
+        if len(with_npshr) >= 2:
+            return None
+        return pump_math.npshr_at_bep_m(
+            ref_rpm,
+            bep,
+            suction_specific_speed=self.suction_specific_speed.value or 9000.0,
+            double_suction=self.impeller_suction.value is ImpellerSuction.DOUBLE,
+        )
+
     def to_site_params(self) -> SiteParams:
         return SiteParams(
             elevation_m=self.site_elevation_m.value or 0.0,
@@ -779,10 +1006,12 @@ class PumpAnalysisConfig(config.Schema):
             speed_ratio=self.pump_speed_ratio.value or 1.0,
             speed_offset=self.pump_speed_offset_rpm.value or 0.0,
             min_running_rpm=self.minimum_running_speed_rpm.value or 300.0,
+            min_engine_load_pct=self.minimum_engine_load_pct.value,
             npsh_warning_margin_m=self.npsh_warning_margin_m.value or 1.5,
             npsh_danger_margin_m=self.npsh_danger_margin_m.value or 0.5,
             min_npsha_m=self.minimum_npsha_m.value,
             bep_flow_m3h=self.bep_flow_m3h.value,
+            npshr_est_bep_m=self.npshr_estimate_bep_m(),
             speed_optional=(
                 self.speed_source_type.value is SourceType.NONE
                 and self.pump_engaged_tag.tag_name._value is not config.NotSet

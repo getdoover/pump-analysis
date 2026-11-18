@@ -47,6 +47,17 @@ def test_config_schema():
         "npsh_warning_margin_m",
         "npsh_danger_margin_m",
         "trip_action",
+        "head_source",
+        "head_lost_alert_delay_seconds",
+        "engine_load_tag",
+        "show_flow_confidence",
+        "discharge_normal_low_bar",
+        "discharge_normal_high_bar",
+        "bep_flow_m3h",
+        "estimate_npshr",
+        "impeller_suction",
+        "suction_specific_speed",
+        "minimum_engine_load_pct",
     ):
         assert key in declared, f"missing config key {key}"
 

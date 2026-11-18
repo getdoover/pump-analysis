@@ -13,6 +13,20 @@ Semantics:
   debounce.
 - Latch: once tripped, the monitor stays tripped until ``reset()``. Alerts
   re-arm only after the condition clears (no repeat spam while it persists).
+- Head lost: once a run has shown head on the curve, head dropping below
+  the curve while the pump holds its speed must persist ``head_lost_delay_s``
+  before one alert is requested. "Holds its speed" is within
+  ``HEAD_LOST_SPEED_FRACTION`` of the speed head was last seen at — slowing
+  the pump down is expected to shed head and does not count. It re-arms when
+  head returns or the pump stops. A run that never built head (idling, never
+  primed) does not alert. A pump judged stopped only by low engine load is
+  still watched: a pump that has run dry sheds load exactly like a declutched
+  one, and that is the case this alert exists for.
+- Sensor fault: SENSOR_FAULT (a pressure reading missing while the pump is
+  at running speed) must persist ``alert_debounce_s`` before one alert is
+  requested; it re-arms when the fault clears. A stopped pump with dead
+  sensors never reaches that state, so loops that power down with the engine
+  stay quiet.
 - Arming: with ``trip_armed=False`` (the ``TripAction.NONE`` alert-only
   install) the danger alert is the entire behaviour — nothing latches, so the
   operator is never shown a TRIPPED state that no trip produced and no reset
@@ -39,10 +53,17 @@ RUNNING_STATES = frozenset(
 )
 
 
+#: Head lost only counts while pump speed is at least this fraction of the
+#: speed at which head was last on the curve.
+HEAD_LOST_SPEED_FRACTION = 0.9
+
+
 @dataclass
 class ProtectionActions:
     send_marginal_alert: bool = False
     send_danger_alert: bool = False
+    send_head_lost_alert: bool = False
+    send_sensor_fault_alert: bool = False
     fire_trip: bool = False
 
 
@@ -54,6 +75,7 @@ class ProtectionMonitor:
     #: False for TripAction.NONE. A disarmed monitor still alerts, but never
     #: latches — a latch with no trip behind it only strands the operator.
     trip_armed: bool = True
+    head_lost_delay_s: float = 60.0
 
     run_started_at: float | None = None
     _was_running: bool = False
@@ -61,6 +83,12 @@ class ProtectionMonitor:
     _danger_since: float | None = None
     _marginal_alerted: bool = False
     _danger_alerted: bool = False
+    _sensor_fault_since: float | None = None
+    _sensor_fault_alerted: bool = False
+    _head_seen: bool = False
+    _head_seen_rpm: float | None = None
+    _head_lost_since: float | None = None
+    _head_lost_alerted: bool = False
     tripped: bool = False
     trip_reason: str = ""
     _history: list[str] = field(default_factory=list)
@@ -77,8 +105,82 @@ class ProtectionMonitor:
             and (now - self.run_started_at) < self.start_inhibit_s
         )
 
-    def update(self, state: AlertState, now: float) -> ProtectionActions:
+    @property
+    def head_lost(self) -> bool:
+        """True from the head-lost alert until head returns or the pump stops."""
+        return self._head_lost_alerted
+
+    def _track_head(
+        self,
+        state: AlertState,
+        head_below_curve: bool | None,
+        pump_rpm: float | None,
+        unloaded: bool,
+        now: float,
+        actions: ProtectionActions,
+    ) -> None:
+        if state in RUNNING_STATES:
+            if state is AlertState.STARTING or head_below_curve is None:
+                # Priming transients / nothing to judge by: neither
+                # establishes head nor counts towards losing it.
+                self._head_lost_since = None
+                return
+            if not head_below_curve:
+                self._head_seen = True
+                self._head_seen_rpm = pump_rpm
+                self._head_lost_since = None
+                self._head_lost_alerted = False
+                return
+        elif not (unloaded and self._head_seen):
+            # Really stopped (speed, clutch signal, sensor fault).
+            self._head_seen = False
+            self._head_seen_rpm = None
+            self._head_lost_since = None
+            self._head_lost_alerted = False
+            return
+        # Head is below the curve, or the pump has shed its load at speed.
+        if not self._head_seen:
+            return
+        if (
+            self._head_seen_rpm is not None
+            and pump_rpm is not None
+            and pump_rpm < self._head_seen_rpm * HEAD_LOST_SPEED_FRACTION
+        ):
+            # Slowed down since head was last seen: losing head is expected.
+            self._head_lost_since = None
+            return
+        if self._head_lost_since is None:
+            self._head_lost_since = now
+        if (
+            not self._head_lost_alerted
+            and (now - self._head_lost_since) >= self.head_lost_delay_s
+        ):
+            self._head_lost_alerted = True
+            actions.send_head_lost_alert = True
+
+    def update(
+        self,
+        state: AlertState,
+        now: float,
+        head_below_curve: bool | None = None,
+        pump_rpm: float | None = None,
+        unloaded: bool = False,
+    ) -> ProtectionActions:
         actions = ProtectionActions()
+        self._track_head(state, head_below_curve, pump_rpm, unloaded, now, actions)
+
+        if state is AlertState.SENSOR_FAULT:
+            if self._sensor_fault_since is None:
+                self._sensor_fault_since = now
+            if (
+                not self._sensor_fault_alerted
+                and (now - self._sensor_fault_since) >= self.alert_debounce_s
+            ):
+                self._sensor_fault_alerted = True
+                actions.send_sensor_fault_alert = True
+        else:
+            self._sensor_fault_since = None
+            self._sensor_fault_alerted = False
 
         # Self-heal a latch left behind by a site that has since disarmed the
         # trip: the reset control is hidden in that mode, so nothing else could.
@@ -136,6 +238,30 @@ class ProtectionMonitor:
         self.trip_reason = ""
         self._danger_since = None
         self._danger_alerted = False
+
+
+def sensor_fault_text(pump: str, faults: list[str]) -> tuple[str, str]:
+    """(title, body) for the sensor-fault-while-running notification."""
+    detail = "; ".join(faults) if faults else "pressure reading unavailable"
+    return (
+        f"{pump}: sensor fault while pump running",
+        f"{pump}: sensor fault while pump running — {detail}. "
+        "Cavitation protection is not active until it is fixed.",
+    )
+
+
+def head_lost_text(pump: str, results: Results) -> tuple[str, str]:
+    """(title, body) for the head-lost-while-running notification."""
+    detail = []
+    if results.tdh_m is not None:
+        detail.append(f"total head {results.tdh_m:.1f} m")
+    if results.pump_rpm is not None:
+        detail.append(f"pump still at {results.pump_rpm:.0f} rpm")
+    tail = f" ({', '.join(detail)})" if detail else ""
+    return (
+        f"{pump}: head lost while pump running",
+        f"{pump}: head lost while pump running{tail} — check prime and suction",
+    )
 
 
 def alert_text(pump: str, results: Results, *, danger: bool) -> tuple[str, str]:

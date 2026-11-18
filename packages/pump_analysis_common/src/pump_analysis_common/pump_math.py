@@ -110,6 +110,28 @@ def npsh_available_m(
     )
 
 
+def suction_kpa_at_npsha(
+    npsha_m: float,
+    barometric_kpa: float,
+    vapour_pressure_kpa: float,
+    density_kg_m3: float,
+    *,
+    gauge_height_above_impeller_m: float = 0.0,
+) -> float:
+    """Suction gauge pressure at which NPSHa equals ``npsha_m``.
+
+    The inverse of :func:`npsh_available_m` with the velocity head left out
+    (flow is not known when gauge bands are laid out; it is small and leaving
+    it out puts the threshold slightly on the cautious side).
+    """
+    static_head = npsha_m - gauge_height_above_impeller_m
+    return (
+        static_head * density_kg_m3 * G / 1000.0
+        + vapour_pressure_kpa
+        - barometric_kpa
+    )
+
+
 # ---------------------------------------------------------------- affinity laws
 
 
@@ -165,3 +187,43 @@ def scale_4_20ma(
     if -0.5 / 16.0 < fraction < 0.0:
         fraction = 0.0
     return fraction * (range_high - range_low) + range_low
+
+
+# --------------------------------------------------------- NPSHr estimation
+#
+# For curves published without NPSHr. A rule of thumb, not a datasheet: real
+# inlets vary enough that the result is good to roughly +/-40% at best
+# efficiency and worse away from it. Callers must present it as an estimate
+# and must not alarm or trip on it.
+
+_USGPM_PER_M3H = 4.402868
+_M_PER_FT = 0.3048
+
+
+def npshr_at_bep_m(
+    rpm: float,
+    bep_flow_m3h: float,
+    *,
+    suction_specific_speed: float = 9000.0,
+    double_suction: bool = False,
+) -> float:
+    """NPSHr at best-efficiency flow from an assumed suction specific speed.
+
+    Nss = N * sqrt(Q) / NPSHr^0.75 in US units (rpm, US gpm, ft), with Q the
+    flow per impeller eye — half the pump flow for a double-suction impeller.
+    """
+    q_gpm = bep_flow_m3h * _USGPM_PER_M3H
+    if double_suction:
+        q_gpm /= 2.0
+    npshr_ft = (rpm * q_gpm**0.5 / suction_specific_speed) ** (4.0 / 3.0)
+    return npshr_ft * _M_PER_FT
+
+
+def npshr_flow_factor(flow_ratio: float) -> float:
+    """NPSHr at a flow relative to NPSHr at best-efficiency flow.
+
+    Flat up to BEP, then rising with the square of flow — the usual shape of
+    the right-hand side of an NPSHr curve. Mirrored in the widget
+    (``estimatedNpshr`` in widget/src/lib/pump.ts); change both together.
+    """
+    return max(1.0, flow_ratio**2)

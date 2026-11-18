@@ -143,6 +143,15 @@ async def gather_readings(
         raw = get_remote("engaged_input")
         engaged = None if raw is None else bool(raw)
 
+    engine_load = None
+    if get_remote is not None and cfg.engine_load_tag.configured:
+        engine_load = cfg.engine_load_tag.apply(get_remote("engine_load_input"))
+    elif cfg.minimum_engine_load_pct.value:
+        faults.append("minimum engine load set but no engine load tag configured")
+
+    if cfg.estimate_npshr.value and not cfg.bep_flow_m3h.value:
+        faults.append("NPSHr estimate enabled but no BEP flow set")
+
     return (
         Readings(
             suction_bar_g=suction,
@@ -151,6 +160,7 @@ async def gather_readings(
             flow_measured_m3h=flow,
             water_temp_c=water_temp,
             pump_engaged=engaged,
+            engine_load_pct=engine_load,
         ),
         faults,
     )

@@ -38,8 +38,11 @@ class PumpAnalysisUI(ui.UI):
         inferred = cfg.flow_source_type.value is SourceType.NONE
         flow_el.display_name = "Calculated Flow" if inferred else "Flow"
         flow_el.units = label
-        # Confidence only means something for calculated flow.
-        self._detail("flow_confidence").hidden = not inferred
+        # Confidence only means something for calculated flow, and a site can
+        # opt out of showing it.
+        self._detail("flow_confidence").hidden = not (
+            inferred and cfg.show_flow_confidence.value is not False
+        )
 
         # No trip armed, no latch to clear — the monitor never sets `tripped`
         # for TripAction.NONE, so the reset control would be permanently inert.
@@ -67,6 +70,28 @@ class PumpAnalysisUI(ui.UI):
         fixed = cfg.head_source.value is HeadSource.FIXED
         if fixed:
             self._elements["tdh"].display_name = "Total Head (assumed)"
+
+        # Head ranges from the curve. Ranges are static but the curve moves
+        # with speed (H ∝ N²), so the green band is the envelope of heads that
+        # sit on the curve at *some* running speed: run-out at the minimum
+        # running speed up to shut-off at the reference speed. Below it the
+        # pump is making no usable head at any speed. Not for fixed head —
+        # that value is an assumption and never moves.
+        heads = [p.head_m.value for p in points if p.head_m.value is not None]
+        ref_rpm = cfg.curve_reference_speed_rpm.value
+        if not fixed and len(heads) >= 2 and ref_rpm:
+            min_rpm = cfg.minimum_running_speed_rpm.value or 300.0
+            slowest = min(min_rpm / ref_rpm, 1.0) ** 2
+            lo = round(min(heads) * slowest, 1)
+            hi = round(max(heads), 1)
+            if 0 < lo < hi:
+                self._elements["tdh"].ranges = [
+                    ui.Range("Below curve", 0, lo, ui.Colour.yellow),
+                    # Not "on curve": the head being in range says nothing
+                    # about whether the pump is making it at the right flow.
+                    ui.Range("Within curve range", lo, hi, ui.Colour.green),
+                    ui.Range("Above curve", hi, round(hi * 1.2, 1), ui.Colour.yellow),
+                ]
         for name in ("npsh_margin", "inlet_pressure", "discharge_pressure"):
             self._detail(name).hidden = fixed
 
@@ -99,24 +124,56 @@ class PumpAnalysisUI(ui.UI):
         inlet.precision = precision
         discharge.precision = precision
 
+        def band(name, lo_bar, hi_bar, colour):
+            return ui.Range(name, round(lo_bar * pf, 2), round(hi_bar * pf, 2), colour)
+
+        # Inlet: coloured by what the app alarms on — the suction pressures at
+        # which NPSHa hits the danger and warning levels for this site
+        # (elevation, water temperature, gauge height). Falls back to plain
+        # vacuum depth when there is no NPSHa floor or NPSHr to work from, or
+        # the thresholds don't fit inside the transmitter span.
         s_lo = cfg.suction_range_low_bar.value
         s_hi = cfg.suction_range_high_bar.value
         if s_lo is not None and s_hi is not None and s_hi > s_lo:
-            inlet.ranges = [
-                ui.Range("Deep vacuum", round(s_lo * pf, 2), round(-0.5 * pf, 2), ui.Colour.red),
-                ui.Range("Vacuum", round(-0.5 * pf, 2), round(-0.15 * pf, 2), ui.Colour.yellow),
-                ui.Range("Healthy", round(-0.15 * pf, 2), round(s_hi * pf, 2), ui.Colour.green),
-            ]
+            danger, warn, from_npshr = cfg.inlet_thresholds_bar() or (-0.5, -0.15, False)
+            if not (s_lo < danger < warn < s_hi):
+                danger, warn, from_npshr = -0.5, -0.15, False
+            # Only the pump's own NPSHr can call a suction pressure healthy.
+            # Without it the bands mark the NPSHa floor and say so: green is
+            # "not below the floor", which a cavitating pump can still be.
+            names = (
+                ("Cavitation risk", "Marginal", "Healthy")
+                if from_npshr
+                else ("Below NPSHa floor", "Near NPSHa floor", "Above NPSHa floor")
+            )
+            if s_lo < danger < warn < s_hi:
+                inlet.ranges = [
+                    band(names[0], s_lo, danger, ui.Colour.red),
+                    band(names[1], danger, warn, ui.Colour.yellow),
+                    band(names[2], warn, s_hi, ui.Colour.blue if not from_npshr else ui.Colour.green),
+                ]
+
+        # Discharge: green where a healthy pump on the configured curve can
+        # sit (or the explicit Discharge Normal Low/High). Falls back to
+        # fractions of the transmitter span without a curve.
         d_lo = cfg.discharge_range_low_bar.value
         d_hi = cfg.discharge_range_high_bar.value
         if d_lo is not None and d_hi is not None and d_hi > d_lo:
             span = d_hi - d_lo
-            discharge.ranges = [
-                ui.Range("Low", round(d_lo * pf, 2), round((d_lo + 0.25 * span) * pf, 2), ui.Colour.yellow),
-                ui.Range("Normal", round((d_lo + 0.25 * span) * pf, 2), round((d_lo + 0.85 * span) * pf, 2),
-                         ui.Colour.green),
-                ui.Range("High", round((d_lo + 0.85 * span) * pf, 2), round(d_hi * pf, 2), ui.Colour.yellow),
-            ]
+            low, high = cfg.discharge_normal_bar() or (
+                d_lo + 0.25 * span,
+                d_lo + 0.85 * span,
+            )
+            low, high = max(low, d_lo), min(high, d_hi)
+            ranges = []
+            if low > d_lo:
+                ranges.append(band("Low", d_lo, low, ui.Colour.yellow))
+            if high > low:
+                ranges.append(band("Normal", low, high, ui.Colour.green))
+            if d_hi > high:
+                ranges.append(band("High", high, d_hi, ui.Colour.yellow))
+            if ranges:
+                discharge.ranges = ranges
 
     # ---- warnings (visibility driven by *_hidden tags; they render only when
     #      the condition is live, so they cost nothing on a healthy pump)
@@ -128,6 +185,9 @@ class PumpAnalysisUI(ui.UI):
     )
     marginal_warning = ui.WarningIndicator(
         "NPSH margin marginal", hidden=T.marginal_warning_hidden
+    )
+    head_lost_warning = ui.WarningIndicator(
+        "Head lost while pump running", hidden=T.head_lost_warning_hidden
     )
     fault_warning = ui.WarningIndicator(
         "Sensor / configuration fault", hidden=T.fault_warning_hidden

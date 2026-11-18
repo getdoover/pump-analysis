@@ -7,6 +7,7 @@ import {
   ComposedChart,
   Line,
   ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer,
   Scatter,
   Tooltip,
@@ -21,6 +22,8 @@ import { useRemoteParams } from "customer_site/useRemoteParams";
 import { Badge, Card, CardContent, CardHeader } from "./components/ui";
 import { RadialGauge } from "./components/RadialGauge";
 import {
+  estimatedNpshr,
+  NPSHR_ESTIMATE_SPREAD,
   parseConfig,
   scaleCurve,
   tagValue,
@@ -88,16 +91,20 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
       flow: t("flow_m3h"),
       head: t("tdh_m"),
       rpm: t("pump_rpm"),
+      engineRpm: t("engine_rpm"),
       suction: t("suction_bar"),
       discharge: t("discharge_bar"),
       npsha: t("npsha_m"),
       npshr: t("npshr_m"),
       margin: t("npsh_margin_m"),
+      npshrEstBep: t("npshr_est_bep_m"),
       confidence: t("flow_confidence"),
       pctOfBep: t("pct_of_bep"),
       state: (appKey && ((tagAgg?.[appKey] as Record<string, unknown>)?.state as string)) || "not_running",
       flowOrigin:
         (appKey && ((tagAgg?.[appKey] as Record<string, unknown>)?.flow_origin as string)) || "none",
+      faultText:
+        (appKey && ((tagAgg?.[appKey] as Record<string, unknown>)?.fault_text as string)) || "",
     };
   }, [tagAgg, appKey]);
 
@@ -144,6 +151,31 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
   const liveCurve: CurvePoint[] =
     haveCurve && live.rpm ? scaleCurve(cfg.curve, cfg.referenceRpm!, live.rpm) : [];
 
+  // Head off the live-speed curve: there is a head and a speed but no point
+  // on the curve to read a flow from. Drawn as a line at that head instead
+  // of an operating point. Measured head "below" = turning without building
+  // pressure (unloaded / not primed / past run-out); "above" = low flow, left
+  // of the curve's first published point (normal briefly; a config problem
+  // only if it persists at working speed — it keeps its native warning). With a fixed
+  // head nothing is measured: below the curve means the configured head is
+  // too low for this speed.
+  const liveHeads = liveCurve.map((p) => p.head_m);
+  const curveMiss: "below" | "above" | null =
+    live.flow == null &&
+    live.head != null &&
+    liveHeads.length > 0 &&
+    live.state !== "not_running" &&
+    live.state !== "starting"
+      ? live.head < Math.min(...liveHeads)
+        ? "below"
+        : live.head > Math.max(...liveHeads)
+          ? "above"
+          : null
+      : null;
+  const curveSpan = liveHeads.length
+    ? `${Math.min(...liveHeads).toFixed(1)}–${Math.max(...liveHeads).toFixed(1)} m`
+    : "";
+
   // All flow coordinates below are in DISPLAY units (× fx).
   const refCurveD = cfg.curve.map((p) => ({ ...p, flow: p.flow_m3h * fx }));
   const liveCurveD = liveCurve.map((p) => ({ ...p, flow: p.flow_m3h * fx }));
@@ -171,6 +203,27 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
       p.npshr_m! + cfg.warningMarginM,
     ] as [number, number],
   }));
+  // Opt-in rough NPSHr for curves published without one. Drawn as a grey
+  // line inside a ±40% band and labelled as an estimate; it gets none of the
+  // red/amber risk zones above and drives no state — those need real NPSHr.
+  const estNpshr =
+    npshrSource.length < 2 && haveCurve && live.npshrEstBep != null && cfg.bepFlowM3h
+      ? estimatedNpshr(
+          liveCurve.length ? liveCurve : cfg.curve,
+          live.npshrEstBep,
+          cfg.bepFlowM3h,
+          speedScale
+        ).map((p) => ({
+          flow: p.flow_m3h * fx,
+          npshr_est: p.npshr_m,
+          est_band: [
+            p.npshr_m * (1 - NPSHR_ESTIMATE_SPREAD),
+            p.npshr_m * (1 + NPSHR_ESTIMATE_SPREAD),
+          ] as [number, number],
+        }))
+      : [];
+  const estLabel = estNpshr.length ? estNpshr[0] : null;
+
   const labelAnchor = npshrSource.length
     ? npshrSource[Math.floor((npshrSource.length - 1) * 0.7)]
     : null;
@@ -242,6 +295,13 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
         ? COLOURS.marginalTrack
         : COLOURS.dangerTrack;
 
+  // The figure can be hidden per site; "flow inferred" itself always shows.
+  const showConfidence = cfg.showFlowConfidence && live.confidence != null;
+
+  // The axis ends at the widest curve, which is rarely a round number once
+  // the live curve is scaled past reference speed.
+  const flowTick = (v: number) => (xMax >= 100 ? Math.round(v).toString() : Number(v.toFixed(1)).toString());
+
   const slimTooltip = (
     <Tooltip
       formatter={(value: number | number[], name: string) =>
@@ -257,17 +317,29 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
         <CardHeader>
           <div className="flex items-center justify-center gap-1.5 flex-wrap">
             <Badge variant={STATE_BADGE[live.state] ?? "secondary"}>
-              {STATE_LABELS[live.state] ?? live.state}
+              {live.state === "config_fault" && curveMiss === "below" && !cfg.headFixed
+                ? "No head"
+                : (STATE_LABELS[live.state] ?? live.state)}
             </Badge>
             {live.rpm != null && (
               <Badge variant="outline">Pump {Math.round(live.rpm)} RPM</Badge>
             )}
+            {/* Engine speed, where there is one and it isn't simply the pump
+                speed again (direct drive, ratio 1). */}
+            {live.engineRpm != null &&
+              (live.rpm == null || Math.round(live.engineRpm) !== Math.round(live.rpm)) && (
+                <Badge variant="outline">Engine {Math.round(live.engineRpm)} RPM</Badge>
+              )}
             {live.pctOfBep != null && (
-              <Badge variant="outline">{Math.round(live.pctOfBep)}% of BEP</Badge>
+              <Badge variant="outline">
+                {live.flowOrigin === "inferred" ? "~" : ""}
+                {Math.round(live.pctOfBep)}% of BEP
+              </Badge>
             )}
+            {estNpshr.length > 0 && <Badge variant="secondary">NPSHr estimated</Badge>}
             {live.flowOrigin === "inferred" && (
               <Badge variant="secondary">
-                flow inferred{live.confidence != null ? ` · conf ${(live.confidence * 100).toFixed(0)}%` : ""}
+                flow inferred, not verified{showConfidence ? ` · conf ${(live.confidence! * 100).toFixed(0)}%` : ""}
               </Badge>
             )}
           </div>
@@ -284,7 +356,7 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
                   precision={2}
                   subtitle={
                     live.flowOrigin === "inferred"
-                      ? `inferred${live.confidence != null ? `, ${(live.confidence * 100).toFixed(0)}% confidence` : ""}`
+                      ? `inferred${showConfidence ? `, ${(live.confidence! * 100).toFixed(0)}% confidence` : ""}`
                       : live.flowOrigin === "measured"
                         ? "measured"
                         : undefined
@@ -368,6 +440,7 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
                         dataKey="flow"
                         domain={[0, xMax]}
                         tick={{ fontSize: 11 }}
+                        tickFormatter={flowTick}
                         height={34}
                         label={{
                           value: `Flow (${cfg.flowUnit})`,
@@ -443,6 +516,24 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
                           isAnimationActive={false}
                         />
                       )}
+                      {/* Head off the curve: no operating point to plot, so
+                          mark the measured head itself. */}
+                      {curveMiss && (
+                        <ReferenceLine
+                          y={live.head!}
+                          stroke={COLOURS.pointMarginal}
+                          strokeWidth={2}
+                          strokeDasharray="5 4"
+                          ifOverflow="extendDomain"
+                          label={{
+                            value: `${cfg.headFixed ? "Fixed" : "Measured"} head ${live.head!.toFixed(1)} m — ${curveMiss} the curve`,
+                            position: curveMiss === "below" ? "insideBottomLeft" : "insideTopLeft",
+                            fontSize: 10,
+                            fontWeight: 600,
+                            fill: "#8a6100",
+                          }}
+                        />
+                      )}
                       {/* Recent operating-point trail */}
                       <Scatter
                         data={trail
@@ -485,6 +576,7 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
                         dataKey="flow"
                         domain={[0, xMax]}
                         tick={{ fontSize: 11 }}
+                        tickFormatter={flowTick}
                         height={34}
                         label={{
                           value: `Flow (${cfg.flowUnit})`,
@@ -515,6 +607,45 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
                           <Area data={bands} dataKey="warn_band" stroke="none"
                             fill={COLOURS.pointMarginal} fillOpacity={0.14} isAnimationActive={false}
                             legendType="none" tooltipType="none" name="marginal-zone" />
+                        </>
+                      )}
+                      {/* Estimated NPSHr (no datasheet values): band + line,
+                          grey on purpose — it is not a cavitation limit. */}
+                      {estNpshr.length > 1 && (
+                        <>
+                          <Area data={estNpshr} dataKey="est_band" stroke="none"
+                            fill={COLOURS.refCurve} fillOpacity={0.18} isAnimationActive={false}
+                            legendType="none" tooltipType="none" name="npshr-estimate-band" />
+                          <Line
+                            data={estNpshr}
+                            dataKey="npshr_est"
+                            name="NPSHr (estimated)"
+                            stroke={COLOURS.refCurve}
+                            strokeDasharray="6 4"
+                            dot={false}
+                            isAnimationActive={false}
+                          />
+                          {estLabel && (
+                            <Scatter
+                              data={[{
+                                flow: estLabel.flow,
+                                y: estLabel.est_band[1],
+                                text: `Estimated NPSHr ±${Math.round(NPSHR_ESTIMATE_SPREAD * 100)}% (not datasheet)`,
+                              }]}
+                              dataKey="y"
+                              name="npshr-estimate-label"
+                              legendType="none"
+                              tooltipType="none"
+                              isAnimationActive={false}
+                              shape={(props: { cx?: number; cy?: number; payload?: { text: string } }) => (
+                                <text x={props.cx} y={(props.cy ?? 0) - 4} textAnchor="start"
+                                  className="fill-muted-foreground"
+                                  style={{ fontSize: 10, fontWeight: 600 }}>
+                                  {props.payload?.text}
+                                </text>
+                              )}
+                            />
+                          )}
                         </>
                       )}
                       {zoneLabels.length > 0 && (
@@ -569,10 +700,16 @@ function PumpAnalysisInner({ uiElement }: { uiElement?: { app_key?: string } }) 
 
           <p className="text-xs text-muted-foreground mt-2 mb-0 text-center">
             {live.flowOrigin === "inferred"
-              ? "Flow is inferred from the pump curve — a trend indicator, not a measurement."
+              ? "Flow is read off the pump curve at the measured head, so it is only right if the pump is really on this curve. Wear, cavitation or a wrong speed ratio all make it read high, and nothing here can detect that without a flow meter. The confidence figure reflects curve steepness only."
               : live.flowOrigin === "measured"
                 ? "Flow from the configured flow meter."
-                : "No flow available."}
+                : curveMiss && cfg.headFixed
+                  ? `Fixed head ${live.head!.toFixed(1)} m is off the curve at this speed (${curveSpan}) — check the configured fixed total head. No flow estimate.`
+                  : curveMiss === "below"
+                  ? `Pump is turning but making ${live.head!.toFixed(1)} m of head; the curve covers ${curveSpan} at this speed. Unloaded, not primed, or past run-out — no flow estimate.`
+                  : curveMiss === "above"
+                    ? `Measured head ${live.head!.toFixed(1)} m is above the published curve at this speed (${curveSpan}): the pump is at low flow, left of the curve's first point, so there is no flow estimate. If it stays like this at working speed, check the speed ratio, curve points and pressure ranges.`
+                    : live.faultText || "No flow available."}
           </p>
         </CardContent>
       </Card>

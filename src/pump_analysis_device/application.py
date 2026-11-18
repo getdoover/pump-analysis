@@ -12,6 +12,8 @@ from pump_analysis_common.protection import (
     ProtectionMonitor,
     RUNNING_STATES,
     alert_text,
+    head_lost_text,
+    sensor_fault_text,
 )
 from pump_analysis_common.publish import (
     TOTALISER_STATE_TAG,
@@ -38,6 +40,7 @@ REMOTE_TAGS = {
     "speed_input": "raw_speed",
     "water_temp_input": "raw_water_temp",
     "engaged_input": "raw_engaged",
+    "engine_load_input": "raw_engine_load",
     "engine_hours_input": "raw_engine_hours",
     "fuel_rate_input": "raw_fuel_rate",
     "power_input": "raw_power",
@@ -68,6 +71,7 @@ class PumpAnalysisDeviceApplication(Application):
             alert_debounce_s=self.config.alert_debounce_seconds.value,
             trip_debounce_s=self.config.trip_debounce_seconds.value,
             trip_armed=self.config.trip_action.value is not TripAction.NONE,
+            head_lost_delay_s=self.config.head_lost_alert_delay_seconds.value,
         )
         self._trip_do_driven = False
         self.totals = TotaliserState.from_dict(self.get_tag(TOTALISER_STATE_TAG))
@@ -91,8 +95,31 @@ class PumpAnalysisDeviceApplication(Application):
             readings, self.curve, self.site_params, in_start_inhibit=inhibit
         )
 
-        actions = self.monitor.update(results.state, now)
+        actions = self.monitor.update(
+            results.state,
+            now,
+            results.head_below_curve,
+            results.pump_rpm,
+            results.unloaded,
+        )
         pump = self.config.pump_name.value
+
+        if actions.send_sensor_fault_alert:
+            title, body = sensor_fault_text(pump, config_faults + results.faults)
+            await self.send_notification(
+                body,
+                title=title,
+                severity=NotificationSeverity.Warn,
+                topic=NOTIFY_TOPIC,
+            )
+        if actions.send_head_lost_alert:
+            title, body = head_lost_text(pump, results)
+            await self.send_notification(
+                body,
+                title=title,
+                severity=NotificationSeverity.Warn,
+                topic=NOTIFY_TOPIC,
+            )
 
         if actions.send_marginal_alert:
             title, body = alert_text(pump, results, danger=False)
@@ -122,6 +149,7 @@ class PumpAnalysisDeviceApplication(Application):
             config_faults,
             flow_display_factor=flow_factor,
             pressure_display_factor=pressure_factor,
+            npshr_est_bep_m=self.site_params.npshr_est_bep_m,
         )
         await self._update_totals(results.flow_m3h)
 

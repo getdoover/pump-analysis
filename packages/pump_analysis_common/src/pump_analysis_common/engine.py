@@ -71,6 +71,10 @@ class SiteParams:
     speed_ratio: float = 1.0
     speed_offset: float = 0.0
     min_running_rpm: float = 300.0
+    #: Engine load, %, below which the drive is taken to be disengaged (a
+    #: stand-in for a clutch signal the controller doesn't publish).
+    #: None or 0 disables it.
+    min_engine_load_pct: float | None = None
     npsh_warning_margin_m: float = 1.5
     npsh_danger_margin_m: float = 0.5
     #: Absolute NPSHa floor, m. Curve-independent backstop: an NPSHa this low
@@ -80,6 +84,10 @@ class SiteParams:
     min_npsha_m: float | None = 1.5
     #: best-efficiency-point flow at curve reference speed (manufacturer)
     bep_flow_m3h: float | None = None
+    #: Estimated NPSHr at BEP flow and curve reference speed, m — set only
+    #: when the site opted in and the curve carries no NPSHr of its own.
+    #: Indicative only: it never touches ``state``.
+    npshr_est_bep_m: float | None = None
     #: Assumed total head, m. When set, head comes from here instead of the
     #: pressure transmitters (sites with speed but no pressures): flow is read
     #: off the curve at this head, and there is no NPSH analysis.
@@ -101,6 +109,8 @@ class Readings:
     #: Drive engaged (e.g. clutch). False means the engine may be turning but
     #: the pump is not; None means unknown and speed alone decides.
     pump_engaged: bool | None = None
+    #: Engine load, %. Only used against ``SiteParams.min_engine_load_pct``.
+    engine_load_pct: float | None = None
 
 
 @dataclass
@@ -117,6 +127,11 @@ class Results:
     npsha_m: float | None = None
     npshr_m: float | None = None
     npsh_margin_m: float | None = None
+    #: Estimated NPSHr at the operating point and NPSHa minus it. Rough
+    #: (see pump_math.npshr_at_bep_m) and deliberately separate from the two
+    #: fields above so nothing that alarms or trips can pick them up.
+    npshr_est_m: float | None = None
+    npsh_margin_est_m: float | None = None
     #: measured/predicted head deviation, % — pump-degradation indicator.
     #: Only populated when flow is MEASURED (with inferred flow the predicted
     #: head is the measured head by construction).
@@ -125,6 +140,21 @@ class Results:
     #: ~70–120% is the conventional preferred operating region.
     pct_of_bep: float | None = None
     faults: list[str] = field(default_factory=list)
+    #: Measured head against the run-out end of the live-speed curve: True
+    #: when the pump is turning without building usable head, False when it
+    #: is, None when there is nothing to judge by (no curve, no speed, fixed
+    #: head). Drives the "head lost while running" alert.
+    head_below_curve: bool | None = None
+    #: the entry in ``faults`` for a measured head below the curve, if any.
+    #: Kept apart because it is shown on the curve chart and alerted on as
+    #: lost head, not raised as a config warning — a pump idling unloaded is
+    #: not a misconfiguration. Head *above* the curve is one, and stays in
+    #: ``faults`` only.
+    no_head_fault: str | None = None
+    #: NOT_RUNNING because engine load is under the configured minimum, with
+    #: the engine still above running speed. Inferred, not known: a declutched
+    #: pump and a pump that has run dry both look like this.
+    unloaded: bool = False
 
 
 def analyse(
@@ -151,6 +181,12 @@ def analyse(
         return Results(state=AlertState.NOT_RUNNING, pump_rpm=pump_rpm)
     if readings.pump_engaged is False:
         return Results(state=AlertState.NOT_RUNNING, pump_rpm=pump_rpm)
+    if (
+        params.min_engine_load_pct
+        and readings.engine_load_pct is not None
+        and readings.engine_load_pct < params.min_engine_load_pct
+    ):
+        return Results(state=AlertState.NOT_RUNNING, pump_rpm=pump_rpm, unloaded=True)
 
     if params.fixed_head_m is not None:
         return _analyse_fixed_head(
@@ -204,6 +240,8 @@ def analyse(
 
     if pump_rpm is None:
         curve = None  # a curve needs speed
+    if curve is not None:
+        r.head_below_curve = tdh < _curve_head_span(curve, pump_rpm)[0]
     if r.flow_source is not FlowSource.MEASURED and curve is not None:
         est = curve.flow_from_measured_head(tdh, pump_rpm)
         if est is not None:
@@ -212,7 +250,10 @@ def analyse(
             r.flow_confidence = est.confidence
             r.flow_ambiguous = est.ambiguous
         else:
-            faults.append("operating point off the configured curve")
+            fault = _off_curve_fault(curve, tdh, pump_rpm)
+            faults.append(fault)
+            if r.head_below_curve:
+                r.no_head_fault = fault
 
     # --- velocity heads, now that flow is (maybe) known
     v_suction = pump_math.velocity_m_s(r.flow_m3h, params.suction_pipe_id_mm)
@@ -234,6 +275,18 @@ def analyse(
         r.npshr_m = curve.npshr_at_operating_point(r.flow_m3h, pump_rpm)
     if r.npshr_m is not None:
         r.npsh_margin_m = r.npsha_m - r.npshr_m
+    elif (
+        params.npshr_est_bep_m
+        and params.bep_flow_m3h
+        and curve is not None
+        and r.flow_m3h is not None
+    ):
+        speed = pump_rpm / curve.reference_rpm
+        ratio = r.flow_m3h / (params.bep_flow_m3h * speed)
+        r.npshr_est_m = (
+            params.npshr_est_bep_m * pump_math.npshr_flow_factor(ratio) * speed**2
+        )
+        r.npsh_margin_est_m = r.npsha_m - r.npshr_est_m
 
     # --- degradation: measured flow vs curve prediction
     if (
@@ -277,6 +330,48 @@ def analyse(
     return r
 
 
+def _curve_head_span(curve: PumpCurve, pump_rpm: float) -> tuple[float, float]:
+    """(run-out head, shut-off head) of the curve at a live speed, H ∝ N²."""
+    scale = (pump_rpm / curve.reference_rpm) ** 2
+    heads = [p.head_m for p in curve.points]
+    return min(heads) * scale, max(heads) * scale
+
+
+def _off_curve_fault(
+    curve: PumpCurve, head_m: float, pump_rpm: float, *, assumed: bool = False
+) -> str:
+    """Why the head -> flow inversion failed: which end of the curve was missed.
+
+    The two ends mean different things on site. Below run-out the pump is
+    turning without building pressure (unprimed, unloaded, idling). Above the
+    top of the curve it is at low flow, left of the first published point —
+    published curves rarely start at zero flow, so this is not "more head
+    than the pump can make". It is normal briefly (primed at idle, ramping
+    up, throttled); only if it persists at working speed does it point at the
+    speed ratio, the curve or the pressure scaling.
+
+    ``assumed`` is the fixed-head case: nothing was measured, so a head below
+    the curve says the configured head is wrong for this speed.
+    """
+    lo, hi = _curve_head_span(curve, pump_rpm)
+    span = f"curve covers {lo:.1f}-{hi:.1f} m at {pump_rpm:.0f} rpm"
+    if assumed:
+        return (
+            f"fixed head too low for this speed: {head_m:.1f} m, {span} "
+            "- check the configured fixed total head"
+        )
+    if head_m < lo:
+        return (
+            f"head too low for this speed: {head_m:.1f} m, {span} "
+            "- pump unloaded or not primed, or flow is past run-out"
+        )
+    return (
+        f"head above the curve for this speed: {head_m:.1f} m, {span} "
+        "- low flow, left of the published curve; if it persists at working "
+        "speed check speed ratio, curve points and pressure ranges"
+    )
+
+
 def _pct_of_bep(
     flow_m3h: float | None, curve: PumpCurve | None, params: SiteParams, pump_rpm: float | None
 ) -> float | None:
@@ -315,7 +410,9 @@ def _analyse_fixed_head(
             r.flow_source = FlowSource.INFERRED
             r.flow_confidence = 1.0
         elif est is None:
-            faults.append("operating point off the configured curve")
+            faults.append(
+                _off_curve_fault(curve, params.fixed_head_m, pump_rpm, assumed=True)
+            )
         else:
             r.flow_m3h = est.flow_m3h
             r.flow_source = FlowSource.INFERRED
