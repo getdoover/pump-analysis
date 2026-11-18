@@ -678,3 +678,57 @@ def test_inlet_bands_only_say_healthy_with_real_npshr():
     assert [r.label for r in u._detail("inlet_pressure").ranges] == [
         "Cavitation risk", "Marginal", "Healthy",
     ]
+
+
+class TestReadoutScalesAndNpshRows:
+    def ui(self, **over):
+        from pump_analysis_common.app_config import PumpAnalysisConfig
+        from pump_analysis_common.app_ui import PumpAnalysisUI
+
+        c = PumpAnalysisConfig()
+        c._inject_deployment_config({
+            **TestPressureReadoutBands.WARREGO,
+            "pressure_display_units": "bar",
+            **over,
+        })
+        u = PumpAnalysisUI(None, None, None)
+        u.config = c
+        u._apply_config()
+        return u
+
+    def test_inlet_scale_stops_just_above_atmospheric(self):
+        r = self.ui()._detail("inlet_pressure").ranges
+        assert r[0].min == -1.0  # still starts at the transmitter's 4 mA
+        assert r[-1].max == 0.25  # not the 10 bar span
+
+    def test_discharge_high_band_is_a_short_tail(self):
+        r = self.ui()._detail("discharge_pressure").ranges
+        normal, high = r[-2], r[-1]
+        assert high.max == pytest.approx(
+            normal.max + 0.25 * (normal.max - normal.min), abs=0.02
+        )
+        assert high.max < 10
+
+    def test_discharge_without_a_curve_keeps_the_full_span(self):
+        r = self.ui(pump_curve=[])._detail("discharge_pressure").ranges
+        assert r[-1].max == 10
+
+    def test_margin_row_hidden_without_npshr(self):
+        u = self.ui()
+        assert u._detail("npsh_margin").hidden is True
+        assert u._detail("npsh_margin_est").hidden is True
+
+    def test_estimated_margin_row_shows_when_opted_in(self):
+        u = self.ui(estimate_npshr=True, bep_flow_m3h=4900)
+        assert u._detail("npsh_margin").hidden is True
+        assert u._detail("npsh_margin_est").hidden is False
+        assert not isinstance(u._detail("npsh_margin_est").ranges, list)  # unset
+
+    def test_real_margin_row_shows_with_npshr(self):
+        pts = [
+            {"flow_m3h": 2840, "head_m": 22.18, "npshr_m": 4.0},
+            {"flow_m3h": 7000, "head_m": 7.07, "npshr_m": 8.0},
+        ]
+        u = self.ui(pump_curve=pts, estimate_npshr=True, bep_flow_m3h=4900)
+        assert u._detail("npsh_margin").hidden is False
+        assert u._detail("npsh_margin_est").hidden is True

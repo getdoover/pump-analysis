@@ -4,6 +4,12 @@ from .app_config import FLOW_UNIT_INFO, HeadSource, SourceType, TripAction
 from .app_tags import PumpAnalysisTags as T
 
 
+#: Top of the inlet-pressure scale, bar gauge — just above atmospheric.
+INLET_CEILING_BAR = 0.25
+#: "High" band on the discharge scale, as a fraction of the normal band's width.
+DISCHARGE_HIGH_TAIL = 0.25
+
+
 class PumpAnalysisUI(ui.UI):
     async def setup(self):
         """Runs after config injection — safe to read config values here.
@@ -92,8 +98,17 @@ class PumpAnalysisUI(ui.UI):
                     ui.Range("Within curve range", lo, hi, ui.Colour.green),
                     ui.Range("Above curve", hi, round(hi * 1.2, 1), ui.Colour.yellow),
                 ]
-        for name in ("npsh_margin", "inlet_pressure", "discharge_pressure"):
+        for name in ("inlet_pressure", "discharge_pressure"):
             self._detail(name).hidden = fixed
+        # NPSH margin needs the pump's NPSHr. Without it the row can never
+        # hold a value, so it is hidden rather than left blank; a site that
+        # opted into the rough NPSHr estimate gets that margin instead, in
+        # its own row with no danger colouring.
+        has_npshr = sum(1 for p in points if p.npshr_m.value is not None) >= 2
+        self._detail("npsh_margin").hidden = fixed or not has_npshr
+        self._detail("npsh_margin_est").hidden = (
+            fixed or cfg.npshr_estimate_bep_m() is None
+        )
 
         # Per-ML readouts only for the usage source this pump actually has.
         for name in ("fuel_per_ml", "fuel_per_ml_today"):
@@ -147,10 +162,15 @@ class PumpAnalysisUI(ui.UI):
                 else ("Below NPSHa floor", "Near NPSHa floor", "Above NPSHa floor")
             )
             if s_lo < danger < warn < s_hi:
+                # The scale stops a little above atmospheric rather than at
+                # the transmitter's 20 mA: suction rarely goes there, and a
+                # 10 bar ceiling squashes the bands that matter into a sliver.
+                # The readout extends itself if a reading does go past it.
+                top = min(s_hi, max(INLET_CEILING_BAR, warn + (warn - s_lo)))
                 inlet.ranges = [
                     band(names[0], s_lo, danger, ui.Colour.red),
                     band(names[1], danger, warn, ui.Colour.yellow),
-                    band(names[2], warn, s_hi, ui.Colour.blue if not from_npshr else ui.Colour.green),
+                    band(names[2], warn, top, ui.Colour.blue if not from_npshr else ui.Colour.green),
                 ]
 
         # Discharge: green where a healthy pump on the configured curve can
@@ -160,18 +180,20 @@ class PumpAnalysisUI(ui.UI):
         d_hi = cfg.discharge_range_high_bar.value
         if d_lo is not None and d_hi is not None and d_hi > d_lo:
             span = d_hi - d_lo
-            low, high = cfg.discharge_normal_bar() or (
-                d_lo + 0.25 * span,
-                d_lo + 0.85 * span,
-            )
+            derived = cfg.discharge_normal_bar()
+            low, high = derived or (d_lo + 0.25 * span, d_lo + 0.85 * span)
             low, high = max(low, d_lo), min(high, d_hi)
+            # With a known normal band the "High" band is a short tail above
+            # it, not the rest of the transmitter span — same reason as the
+            # inlet ceiling above.
+            top = min(d_hi, high + DISCHARGE_HIGH_TAIL * (high - low)) if derived else d_hi
             ranges = []
             if low > d_lo:
                 ranges.append(band("Low", d_lo, low, ui.Colour.yellow))
             if high > low:
                 ranges.append(band("Normal", low, high, ui.Colour.green))
-            if d_hi > high:
-                ranges.append(band("High", high, d_hi, ui.Colour.yellow))
+            if top > high:
+                ranges.append(band("High", high, top, ui.Colour.yellow))
             if ranges:
                 discharge.ranges = ranges
 
@@ -291,13 +313,24 @@ class PumpAnalysisUI(ui.UI):
                     ui.Range("Healthy", 1.5, 3, ui.Colour.green),
                 ],
             ),
+            # Only shown when the site opted into the NPSHr estimate. No
+            # ranges on purpose: a ±40% figure must not be coloured as danger.
+            ui.NumericVariable(
+                "NPSH Margin (rough estimate)",
+                value=T.npsh_margin_est_m,
+                name="npsh_margin_est",
+                units="m",
+                precision=1,
+                position=3,
+                hidden=True,
+            ),
             ui.NumericVariable(
                 "Inlet Pressure",
                 value=T.suction_display,
                 name="inlet_pressure",
                 units="m head",
                 precision=1,
-                position=3,
+                position=4,
                 ranges=[
                     ui.Range("Deep vacuum", -10.2, -5.1, ui.Colour.red),
                     ui.Range("Vacuum", -5.1, -1.53, ui.Colour.yellow),
@@ -310,7 +343,7 @@ class PumpAnalysisUI(ui.UI):
                 name="discharge_pressure",
                 units="m head",
                 precision=1,
-                position=4,
+                position=5,
                 ranges=[
                     ui.Range("Low", -10.2, 17.85, ui.Colour.yellow),
                     ui.Range("Normal", 17.85, 85.17, ui.Colour.green),
@@ -323,7 +356,7 @@ class PumpAnalysisUI(ui.UI):
                 name="pump_rpm",
                 units="RPM",
                 precision=0,
-                position=5,
+                position=6,
             ),
             # Kept deliberately: the trip latches until it is reset from here,
             # and both applications bind @ui.handler("reset_trip"). Hidden by
@@ -332,7 +365,7 @@ class PumpAnalysisUI(ui.UI):
                 "Reset Trip",
                 name="reset_trip",
                 colour=ui.Colour.red,
-                position=6,
+                position=7,
                 requires_confirm=ui.ConfirmDialog(
                     title="Reset pump trip?",
                     warning_reason=(
